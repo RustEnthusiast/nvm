@@ -23,6 +23,8 @@
     clippy::shadow_reuse
 )]
 #![cfg_attr(feature = "bin", allow(clippy::std_instead_of_core))]
+pub mod opcode;
+use self::opcode::OpCode;
 use core::num::TryFromIntError;
 #[cfg(feature = "bin")]
 use thiserror::Error;
@@ -82,46 +84,10 @@ pub trait MemoryDriver {
     fn write_bytes(&mut self, pos: usize, buffer: &[u8]) -> Result<(), NvmError>;
 }
 
-/// Represents an NVM operation code.
-#[repr(u8)]
-pub enum OpCode {
-    /// Exit operation.
-    Exit,
-    /// No operation.
-    Nop,
-    /// A move constant operation.
-    MoveConst,
-}
-impl OpCode {
-    /// [u8] constant for exit.
-    pub const EXIT: u8 = Self::Exit as _;
-    /// [u8] constant for no operation.
-    pub const NOP: u8 = Self::Nop as _;
-    /// [u8] constant for move constant.
-    pub const MOVE_CONST: u8 = Self::MoveConst as _;
-
-    /// Returns the size of this opcode's instruction.
-    #[allow(clippy::arithmetic_side_effects, clippy::integer_arithmetic)]
-    const fn size(&self) -> usize {
-        match *self {
-            Self::Exit | Self::Nop => 1,
-            Self::MoveConst => 2 + core::mem::size_of::<usize>(),
-        }
-    }
-}
-impl TryFrom<u8> for OpCode {
-    /// The [Err] type returned from this trait's method.
-    type Error = NvmError;
-
-    /// Converts a [u8] into an [`OpCode`].
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            Self::EXIT => Ok(Self::Exit),
-            Self::NOP => Ok(Self::Nop),
-            Self::MOVE_CONST => Ok(Self::MoveConst),
-            _ => Err(NvmError::InvalidOperation(value)),
-        }
-    }
+/// Computes a checked addition operation on a [usize].
+#[inline]
+fn checked_add(x: usize, y: usize) -> Result<usize, NvmError> {
+    x.checked_add(y).ok_or(NvmError::OverflowError)
 }
 
 /// The NVM virtual machine.
@@ -139,6 +105,12 @@ impl VM {
         Self { ip: 0, gpr: [0; 4] }
     }
 
+    /// Returns a mutable reference to a general purpose register.
+    #[inline]
+    fn gpr(&mut self, i: usize) -> Result<&mut usize, NvmError> {
+        self.gpr.get_mut(i).ok_or(NvmError::InvalidRegister(i))
+    }
+
     /// Runs the NVM bytecode on the virtual machine.
     ///
     /// # Errors
@@ -148,31 +120,21 @@ impl VM {
         memory.write_bytes(0, code)?;
         while let Ok(opcode) = memory.read::<u8>(self.ip) {
             let opcode: OpCode = opcode.try_into()?;
-            self.ip = match self.ip.checked_add(opcode.size()) {
-                Some(ip) => ip,
-                _ => return Err(NvmError::OverflowError),
-            };
+            let mut rp = checked_add(self.ip, 1)?;
+            self.ip = checked_add(self.ip, opcode.size())?;
             match opcode {
                 OpCode::Exit => break,
                 OpCode::Nop => {}
+                OpCode::Move => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = memory.read::<u8>(rp)? as _;
+                    *self.gpr(left)? = *self.gpr(right)?;
+                }
                 OpCode::MoveConst => {
-                    let mut rp = match self.ip.checked_sub(self.ip) {
-                        Some(rp) => match rp.checked_add(1) {
-                            Some(rp) => rp,
-                            _ => return Err(NvmError::OverflowError),
-                        },
-                        _ => return Err(NvmError::OverflowError),
-                    };
                     let r = memory.read::<u8>(rp)? as _;
-                    rp = match rp.checked_add(1) {
-                        Some(rp) => rp,
-                        _ => return Err(NvmError::OverflowError),
-                    };
-                    let value = memory.read::<usize>(rp)?;
-                    match self.gpr.get_mut(r) {
-                        Some(gpr) => *gpr = value,
-                        _ => return Err(NvmError::InvalidRegister(r)),
-                    }
+                    rp = checked_add(rp, 1)?;
+                    *self.gpr(r)? = memory.read::<usize>(rp)?;
                 }
             }
         }

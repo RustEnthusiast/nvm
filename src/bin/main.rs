@@ -24,7 +24,7 @@
 )]
 mod memory;
 use self::memory::Memory;
-use nvm::{NvmError, OpCode, VM};
+use nvm::{opcode::OpCode, NvmError, VM};
 use std::io::Error as IoError;
 use thiserror::Error;
 
