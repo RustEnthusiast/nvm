@@ -90,6 +90,24 @@ fn checked_add(x: usize, y: usize) -> Result<usize, NvmError> {
     x.checked_add(y).ok_or(NvmError::OverflowError)
 }
 
+/// Computes a checked subtraction operation on a [usize].
+#[inline]
+fn checked_sub(x: usize, y: usize) -> Result<usize, NvmError> {
+    x.checked_sub(y).ok_or(NvmError::OverflowError)
+}
+
+/// Computes a checked multiplication operation on a [usize].
+#[inline]
+fn checked_mul(x: usize, y: usize) -> Result<usize, NvmError> {
+    x.checked_mul(y).ok_or(NvmError::OverflowError)
+}
+
+/// Computes a checked division operation on a [usize].
+#[inline]
+fn checked_div(x: usize, y: usize) -> Result<usize, NvmError> {
+    x.checked_div(y).ok_or(NvmError::OverflowError)
+}
+
 /// The NVM virtual machine.
 pub struct VM {
     /// The instruction pointer.
@@ -105,9 +123,15 @@ impl VM {
         Self { ip: 0, gpr: [0; 4] }
     }
 
+    /// Returns an immutable reference to a general purpose register.
+    #[inline]
+    fn gpr(&self, i: usize) -> Result<&usize, NvmError> {
+        self.gpr.get(i).ok_or(NvmError::InvalidRegister(i))
+    }
+
     /// Returns a mutable reference to a general purpose register.
     #[inline]
-    fn gpr(&mut self, i: usize) -> Result<&mut usize, NvmError> {
+    fn gpr_mut(&mut self, i: usize) -> Result<&mut usize, NvmError> {
         self.gpr.get_mut(i).ok_or(NvmError::InvalidRegister(i))
     }
 
@@ -125,16 +149,68 @@ impl VM {
             match opcode {
                 OpCode::Exit => break,
                 OpCode::Nop => {}
+                OpCode::Jump => {
+                    let r = memory.read::<u8>(rp)? as _;
+                    self.ip = *self.gpr(r)?;
+                }
                 OpCode::Move => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
                     let right = memory.read::<u8>(rp)? as _;
-                    *self.gpr(left)? = *self.gpr(right)?;
+                    *self.gpr_mut(left)? = *self.gpr(right)?;
                 }
                 OpCode::MoveConst => {
-                    let r = memory.read::<u8>(rp)? as _;
+                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
                     rp = checked_add(rp, 1)?;
-                    *self.gpr(r)? = memory.read::<usize>(rp)?;
+                    *r = memory.read::<usize>(rp)?;
+                }
+                OpCode::Add => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = *self.gpr(memory.read::<u8>(rp)? as _)?;
+                    let left = self.gpr_mut(left)?;
+                    *left = checked_add(*left, right)?;
+                }
+                OpCode::AddConst => {
+                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    rp = checked_add(rp, 1)?;
+                    *r = checked_add(*r, memory.read::<usize>(rp)?)?;
+                }
+                OpCode::Sub => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = *self.gpr(memory.read::<u8>(rp)? as _)?;
+                    let left = self.gpr_mut(left)?;
+                    *left = checked_sub(*left, right)?;
+                }
+                OpCode::SubConst => {
+                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    rp = checked_add(rp, 1)?;
+                    *r = checked_sub(*r, memory.read::<usize>(rp)?)?;
+                }
+                OpCode::Mul => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = *self.gpr(memory.read::<u8>(rp)? as _)?;
+                    let left = self.gpr_mut(left)?;
+                    *left = checked_mul(*left, right)?;
+                }
+                OpCode::MulConst => {
+                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    rp = checked_add(rp, 1)?;
+                    *r = checked_mul(*r, memory.read::<usize>(rp)?)?;
+                }
+                OpCode::Div => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = *self.gpr(memory.read::<u8>(rp)? as _)?;
+                    let left = self.gpr_mut(left)?;
+                    *left = checked_div(*left, right)?;
+                }
+                OpCode::DivConst => {
+                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    rp = checked_add(rp, 1)?;
+                    *r = checked_div(*r, memory.read::<usize>(rp)?)?;
                 }
             }
         }
