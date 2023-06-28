@@ -1,27 +1,29 @@
 //! The virtual memory driver.
-use nvm::{MemoryDriver, NvmError};
+use nvm::{opcode::OpCode, MemoryDriver, NvmError};
 use std::ptr::addr_of;
 
 /// The virtual memory driver.
-pub struct Memory<'buf> {
+pub struct Memory {
     /// The buffer of memory to use as virtual machine RAM.
-    buffer: &'buf mut [u8],
+    buffer: [u8; u8::MAX as _],
 }
-impl<'buf> Memory<'buf> {
+impl Memory {
     /// Creates a new memory driver using `buffer` as a virtual memory buffer.
     #[inline]
-    pub fn new(buffer: &'buf mut [u8]) -> Self {
-        Self { buffer }
+    pub const fn new() -> Self {
+        Self {
+            buffer: [OpCode::EXIT; u8::MAX as _],
+        }
     }
 }
-impl MemoryDriver for Memory<'_> {
+impl MemoryDriver for Memory {
     /// Reads a value at a specific location in the virtual memory.
     fn read<T: Copy>(&self, pos: usize) -> Result<T, NvmError> {
         if let Some(value) = self.buffer.get(pos) {
-            if let Some(end) = pos.checked_add(core::mem::size_of::<T>()) {
+            if let Some(end) = pos.checked_add(std::mem::size_of::<T>()) {
                 if end <= self.buffer.len() {
                     // SAFETY: We've bounds checked the value within `self.buffer`.
-                    return unsafe { Ok(core::ptr::read_unaligned(addr_of!(*value).cast())) };
+                    return unsafe { Ok(std::ptr::read_unaligned(addr_of!(*value).cast())) };
                 }
             }
         }

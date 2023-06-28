@@ -24,7 +24,7 @@
 )]
 mod memory;
 use self::memory::Memory;
-use nvm::{opcode::OpCode, NvmError, VM};
+use nvm::{NvmError, VM};
 use std::io::Error as IoError;
 use thiserror::Error;
 
@@ -41,9 +41,8 @@ pub enum ProgramError {
 
 /// Main entry point of the program.
 fn main() -> Result<(), ProgramError> {
-    let mut ram = [OpCode::EXIT; u8::MAX as _];
-    let mut memory = Memory::new(&mut ram);
     if let Some(f) = std::env::args_os().nth(1) {
+        let mut memory = Memory::new();
         VM::new().run(&std::fs::read(f)?, &mut memory)?;
     }
     Ok(())
