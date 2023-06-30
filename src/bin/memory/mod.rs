@@ -12,7 +12,7 @@ impl Memory {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            buffer: [OpCode::EXIT; u8::MAX as _],
+            buffer: [OpCode::EXIT; u8::MAX as usize + 1],
         }
     }
 }
