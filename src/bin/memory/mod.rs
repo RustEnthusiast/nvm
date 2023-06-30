@@ -5,7 +5,7 @@ use std::ptr::addr_of;
 /// The virtual memory driver.
 pub struct Memory {
     /// The buffer of memory to use as virtual machine RAM.
-    buffer: [u8; u8::MAX as _],
+    buffer: [u8; u8::MAX as _ + 1],
 }
 impl Memory {
     /// Creates a new memory driver using `buffer` as a virtual memory buffer.
