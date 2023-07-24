@@ -9,7 +9,10 @@ path = "src/bin/main.rs"
 required-features = ["bin"]
 
 [features]
-bin = ["thiserror"]
+bin = ["std"]
+std = ["libffi", "libloading", "thiserror"]
 
 [dependencies]
+libffi = { version = "3.2", optional = true }
+libloading = { version = "0.8", optional = true }
 thiserror = { version = "1.0", optional = true }
