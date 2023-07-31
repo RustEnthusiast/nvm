@@ -1,6 +1,16 @@
 //! A small virtual machine that can be used as a Rust library.
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 #![warn(
+    future_incompatible,
+    let_underscore,
+    nonstandard_style,
+    rust_2018_compatibility,
+    rust_2018_idioms,
+    rust_2021_compatibility,
+    unused,
+    warnings,
+    clippy::all,
+    clippy::cargo,
     clippy::complexity,
     clippy::correctness,
     clippy::nursery,
@@ -14,6 +24,7 @@
     clippy::as_conversions,
     clippy::as_underscore,
     clippy::blanket_clippy_restriction_lints,
+    clippy::cargo_common_metadata,
     clippy::implicit_return,
     clippy::exhaustive_enums,
     clippy::fn_to_numeric_cast_any,
@@ -79,9 +90,6 @@ pub enum NvmError {
         error("a virtual stack driver failed to write to location {pos}")
     )]
     StackWriteError { pos: usize },
-    /// An error occurred while attempting to load a library or a library symbol.
-    #[cfg_attr(feature = "std", error(transparent))]
-    LibLoadingError(#[cfg_attr(feature = "std", from)] LibLoadingError),
     /// A syscall's FFI type parameter was invalid.
     #[cfg_attr(
         feature = "std",
@@ -103,6 +111,10 @@ pub enum NvmError {
     /// A string was expected to contain UTF-8 but it's contents are not valid UTF-8.
     #[cfg_attr(feature = "std", error(transparent))]
     Utf8Error(#[cfg_attr(feature = "std", from)] Utf8Error),
+    /// An error occurred while attempting to load a library or a library symbol.
+    #[cfg(feature = "std")]
+    #[cfg_attr(feature = "std", error(transparent))]
+    LibLoadingError(#[cfg_attr(feature = "std", from)] LibLoadingError),
 }
 
 /// A trait that implementors can use to define the behavior of virtual memory reads and writes.
@@ -329,7 +341,7 @@ impl VM {
                             .ok_or(NvmError::MemoryReadError { pos, len: 0 })?;
                         let name = CStr::from_bytes_until_nul(name)?;
                         // SAFETY: We're using an opaque function pointer.
-                        let sym = unsafe { (*lib).get::<fn()>(name.to_bytes())? };
+                        let sym = unsafe { lib.get::<fn()>(name.to_bytes())? };
                         *self.gpr_mut(0)? = *sym as _;
                     }
                 }
