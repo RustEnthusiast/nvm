@@ -15,7 +15,7 @@ impl Memory {
     #[inline]
     pub const fn new() -> Self {
         Self {
-            buffer: [OpCode::EXIT; Self::BYTE_COUNT],
+            buffer: [OpCode::Exit as _; Self::BYTE_COUNT],
         }
     }
 }

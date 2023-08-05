@@ -1,8 +1,9 @@
 //! Represents an NVM operation code.
-use super::NvmError;
+use num_derive::FromPrimitive;
 
 /// Represents an NVM operation code.
 #[repr(u8)]
+#[derive(FromPrimitive)]
 pub enum OpCode {
     /// Exits the program with a given exit code.
     ///
@@ -180,47 +181,6 @@ pub enum OpCode {
     FreeLib,
 }
 impl OpCode {
-    /// [u8] constant for exit.
-    pub const EXIT: u8 = Self::Exit as _;
-    /// [u8] constant for no operation.
-    pub const NOP: u8 = Self::Nop as _;
-    /// [u8] constant for jump.
-    pub const JUMP: u8 = Self::Jump as _;
-    /// [u8] constant for move.
-    pub const MOVE: u8 = Self::Move as _;
-    /// [u8] constant for move constant.
-    pub const MOVE_CONST: u8 = Self::MoveConst as _;
-    /// [u8] constant for push.
-    pub const PUSH: u8 = Self::Push as _;
-    /// [u8] constant for push constant.
-    pub const PUSH_CONST: u8 = Self::PushConst as _;
-    /// [u8] constant for pop.
-    pub const POP: u8 = Self::Pop as _;
-    /// [u8] constant for add.
-    pub const ADD: u8 = Self::Add as _;
-    /// [u8] constant for add const.
-    pub const ADD_CONST: u8 = Self::AddConst as _;
-    /// [u8] constant for sub.
-    pub const SUB: u8 = Self::Sub as _;
-    /// [u8] constant for sub const.
-    pub const SUB_CONST: u8 = Self::SubConst as _;
-    /// [u8] constant for mul.
-    pub const MUL: u8 = Self::Mul as _;
-    /// [u8] constant for mul const.
-    pub const MUL_CONST: u8 = Self::MulConst as _;
-    /// [u8] constant for div.
-    pub const DIV: u8 = Self::Div as _;
-    /// [u8] constant for div const.
-    pub const DIV_CONST: u8 = Self::DivConst as _;
-    /// [u8] constant for load lib.
-    pub const LOAD_LIB: u8 = Self::LoadLib as _;
-    /// [u8] constant for load sym.
-    pub const LOAD_SYM: u8 = Self::LoadSym as _;
-    /// [u8] constant for syscall.
-    pub const SYSCALL: u8 = Self::Syscall as _;
-    /// [u8] constant for free lib.
-    pub const FREE_LIB: u8 = Self::FreeLib as _;
-
     /// Returns the size of this opcode's instruction.
     #[allow(clippy::arithmetic_side_effects, clippy::arithmetic_side_effects)]
     pub(super) const fn size(&self) -> usize {
@@ -237,37 +197,6 @@ impl OpCode {
             Self::MoveConst | Self::AddConst | Self::SubConst | Self::MulConst | Self::DivConst => {
                 2 + core::mem::size_of::<usize>()
             }
-        }
-    }
-}
-impl TryFrom<u8> for OpCode {
-    /// The [Err] type returned from this trait's method.
-    type Error = NvmError;
-
-    /// Converts a [u8] into an [`OpCode`].
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            Self::EXIT => Ok(Self::Exit),
-            Self::NOP => Ok(Self::Nop),
-            Self::JUMP => Ok(Self::Jump),
-            Self::MOVE => Ok(Self::Move),
-            Self::MOVE_CONST => Ok(Self::MoveConst),
-            Self::PUSH => Ok(Self::Push),
-            Self::PUSH_CONST => Ok(Self::PushConst),
-            Self::POP => Ok(Self::Pop),
-            Self::ADD => Ok(Self::Add),
-            Self::ADD_CONST => Ok(Self::AddConst),
-            Self::SUB => Ok(Self::Sub),
-            Self::SUB_CONST => Ok(Self::SubConst),
-            Self::MUL => Ok(Self::Mul),
-            Self::MUL_CONST => Ok(Self::MulConst),
-            Self::DIV => Ok(Self::Div),
-            Self::DIV_CONST => Ok(Self::DivConst),
-            Self::LOAD_LIB => Ok(Self::LoadLib),
-            Self::LOAD_SYM => Ok(Self::LoadSym),
-            Self::SYSCALL => Ok(Self::Syscall),
-            Self::FREE_LIB => Ok(Self::FreeLib),
-            _ => Err(NvmError::InvalidOperation(value)),
         }
     }
 }

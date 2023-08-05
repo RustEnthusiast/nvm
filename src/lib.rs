@@ -40,6 +40,7 @@
 pub mod opcode;
 use self::opcode::OpCode;
 use core::{ffi::FromBytesUntilNulError, num::TryFromIntError, str::Utf8Error};
+use num_traits::FromPrimitive;
 #[cfg(feature = "std")]
 use ::{
     libffi::middle::{Cif, CodePtr, Type},
@@ -233,7 +234,8 @@ impl VM {
     pub fn run(mut self, code: &[u8], memory: &mut impl MemoryDriver) -> Result<usize, NvmError> {
         memory.write_bytes(0, code)?;
         loop {
-            let opcode: OpCode = memory.read::<u8>(self.ip)?.try_into()?;
+            let op = memory.read::<u8>(self.ip)?;
+            let opcode = OpCode::from_u8(op).ok_or(NvmError::InvalidOperation(op))?;
             let mut rp = checked_add(self.ip, 1)?;
             self.ip = checked_add(self.ip, opcode.size())?;
             match opcode {
