@@ -16,6 +16,7 @@
     clippy::implicit_return,
     clippy::exhaustive_enums,
     clippy::fn_to_numeric_cast_any,
+    clippy::min_ident_chars,
     clippy::missing_inline_in_public_items,
     clippy::mod_module_files,
     clippy::question_mark_used,
@@ -23,6 +24,7 @@
     clippy::semicolon_outside_block,
     clippy::shadow_reuse,
     clippy::shadow_unrelated,
+    clippy::single_call_fn,
     clippy::std_instead_of_core
 )]
 mod memory;

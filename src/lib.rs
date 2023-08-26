@@ -28,6 +28,7 @@
     clippy::implicit_return,
     clippy::exhaustive_enums,
     clippy::fn_to_numeric_cast_any,
+    clippy::min_ident_chars,
     clippy::missing_inline_in_public_items,
     clippy::mod_module_files,
     clippy::question_mark_used,
@@ -35,6 +36,7 @@
     clippy::semicolon_outside_block,
     clippy::shadow_reuse,
     clippy::shadow_unrelated,
+    clippy::single_call_fn,
     clippy::std_instead_of_core
 )]
 pub mod opcode;
@@ -194,35 +196,57 @@ fn checked_div(x: usize, y: usize) -> Result<usize, NvmError> {
 
 /// The NVM virtual machine.
 pub struct VM {
-    /// The instruction pointer.
-    ip: usize,
-    /// The stack pointer.
-    sp: usize,
     /// The general purpose registers.
-    gpr: [usize; 4],
+    reg: [usize; 6],
 }
 impl VM {
+    /// A constant for indexing the virtual machine's instruction pointer register.
+    pub const IP: usize = 4;
+
+    /// A constant for indexing the virtual machine's stack pointer register.
+    pub const SP: usize = 5;
+
     /// Creates a new NVM virtual machine.
     #[inline]
     #[must_use]
     pub const fn new() -> Self {
-        Self {
-            ip: 0,
-            sp: 0,
-            gpr: [0; 4],
-        }
+        Self { reg: [0; 6] }
     }
 
-    /// Returns an immutable reference to a general purpose register.
+    /// Returns a copy of a register.
     #[inline]
-    fn gpr(&self, i: usize) -> Result<&usize, NvmError> {
-        self.gpr.get(i).ok_or(NvmError::InvalidRegister(i))
+    fn reg(&self, i: usize) -> Result<usize, NvmError> {
+        self.reg.get(i).copied().ok_or(NvmError::InvalidRegister(i))
     }
 
-    /// Returns a mutable reference to a general purpose register.
+    /// Returns a mutable reference to a register.
     #[inline]
-    fn gpr_mut(&mut self, i: usize) -> Result<&mut usize, NvmError> {
-        self.gpr.get_mut(i).ok_or(NvmError::InvalidRegister(i))
+    fn reg_mut(&mut self, i: usize) -> Result<&mut usize, NvmError> {
+        self.reg.get_mut(i).ok_or(NvmError::InvalidRegister(i))
+    }
+
+    /// Returns a copy of the instruction pointer.
+    #[inline]
+    const fn ip(&self) -> usize {
+        self.reg[Self::IP]
+    }
+
+    /// Returns a mutable reference to the instruction pointer.
+    #[inline]
+    fn ip_mut(&mut self) -> &mut usize {
+        &mut self.reg[Self::IP]
+    }
+
+    /// Returns a copy of the stack pointer.
+    #[inline]
+    const fn sp(&self) -> usize {
+        self.reg[Self::SP]
+    }
+
+    /// Returns a mutable reference to the stack pointer.
+    #[inline]
+    fn sp_mut(&mut self) -> &mut usize {
+        &mut self.reg[Self::SP]
     }
 
     /// Runs the NVM bytecode on the virtual machine.
@@ -234,93 +258,94 @@ impl VM {
     pub fn run(mut self, code: &[u8], memory: &mut impl MemoryDriver) -> Result<usize, NvmError> {
         memory.write_bytes(0, code)?;
         loop {
-            let op = memory.read::<u8>(self.ip)?;
+            let ip = self.ip();
+            let op = memory.read::<u8>(ip)?;
             let opcode = OpCode::from_u8(op).ok_or(NvmError::InvalidOperation(op))?;
-            let mut rp = checked_add(self.ip, 1)?;
-            self.ip = checked_add(self.ip, opcode.size())?;
+            let mut rp = checked_add(ip, 1)?;
+            *self.ip_mut() = checked_add(ip, opcode.size())?;
             match opcode {
-                OpCode::Exit => return Ok(*self.gpr(0)?),
+                OpCode::Exit => return self.reg(0),
                 OpCode::Nop => {}
-                OpCode::Jump => self.ip = *self.gpr(memory.read::<u8>(rp)? as _)?,
+                OpCode::Jump => *self.ip_mut() = self.reg(memory.read::<u8>(rp)? as _)?,
                 OpCode::Move => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
                     let right = memory.read::<u8>(rp)? as _;
-                    *self.gpr_mut(left)? = *self.gpr(right)?;
+                    *self.reg_mut(left)? = self.reg(right)?;
                 }
                 OpCode::MoveConst => {
-                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
                     rp = checked_add(rp, 1)?;
                     *r = memory.read::<usize>(rp)?;
                 }
                 OpCode::Push => {
-                    let value = *self.gpr(memory.read::<u8>(rp)? as _)?;
-                    memory.stack_driver()?.write(self.sp, value)?;
-                    self.sp = checked_add(self.sp, core::mem::size_of::<usize>())?;
+                    let value = self.reg(memory.read::<u8>(rp)? as _)?;
+                    memory.stack_driver()?.write(self.sp(), value)?;
+                    *self.sp_mut() = checked_add(self.sp(), core::mem::size_of::<usize>())?;
                 }
                 OpCode::PushConst => {
                     let value = memory.read::<usize>(rp)?;
-                    memory.stack_driver()?.write(self.sp, value)?;
-                    self.sp = checked_add(self.sp, core::mem::size_of::<usize>())?;
+                    memory.stack_driver()?.write(self.sp(), value)?;
+                    *self.sp_mut() = checked_add(self.sp(), core::mem::size_of::<usize>())?;
                 }
                 OpCode::Pop => {
-                    let sp = self.sp;
-                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    let sp = self.sp();
+                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
                     *r = memory.stack_driver()?.read(sp)?;
-                    self.sp = checked_sub(sp, core::mem::size_of::<usize>())?;
+                    *self.sp_mut() = checked_sub(sp, core::mem::size_of::<usize>())?;
                 }
                 OpCode::Add => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
-                    let right = *self.gpr(memory.read::<u8>(rp)? as _)?;
-                    let left = self.gpr_mut(left)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
                     *left = checked_add(*left, right)?;
                 }
                 OpCode::AddConst => {
-                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
                     rp = checked_add(rp, 1)?;
                     *r = checked_add(*r, memory.read::<usize>(rp)?)?;
                 }
                 OpCode::Sub => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
-                    let right = *self.gpr(memory.read::<u8>(rp)? as _)?;
-                    let left = self.gpr_mut(left)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
                     *left = checked_sub(*left, right)?;
                 }
                 OpCode::SubConst => {
-                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
                     rp = checked_add(rp, 1)?;
                     *r = checked_sub(*r, memory.read::<usize>(rp)?)?;
                 }
                 OpCode::Mul => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
-                    let right = *self.gpr(memory.read::<u8>(rp)? as _)?;
-                    let left = self.gpr_mut(left)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
                     *left = checked_mul(*left, right)?;
                 }
                 OpCode::MulConst => {
-                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
                     rp = checked_add(rp, 1)?;
                     *r = checked_mul(*r, memory.read::<usize>(rp)?)?;
                 }
                 OpCode::Div => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
-                    let right = *self.gpr(memory.read::<u8>(rp)? as _)?;
-                    let left = self.gpr_mut(left)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
                     *left = checked_div(*left, right)?;
                 }
                 OpCode::DivConst => {
-                    let r = self.gpr_mut(memory.read::<u8>(rp)? as _)?;
+                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
                     rp = checked_add(rp, 1)?;
                     *r = checked_div(*r, memory.read::<usize>(rp)?)?;
                 }
                 OpCode::LoadLib => {
                     #[cfg(feature = "std")]
                     {
-                        let pos = *self.gpr(0)?;
+                        let pos = self.reg(0)?;
                         let name = memory
                             .buffer()
                             .get(pos..)
@@ -328,15 +353,15 @@ impl VM {
                         let name = CStr::from_bytes_until_nul(name)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         let lib = unsafe { Box::into_raw(Box::new(Library::new(name.to_str()?)?)) };
-                        *self.gpr_mut(0)? = lib as _;
+                        *self.reg_mut(0)? = lib as _;
                     }
                 }
                 OpCode::LoadSym => {
                     #[cfg(feature = "std")]
                     {
                         // SAFETY: The safety of this operation is documented by it's `Op`.
-                        let lib = unsafe { &*(*self.gpr(0)? as *const Library) };
-                        let pos = *self.gpr(1)?;
+                        let lib = unsafe { &*(self.reg(0)? as *const Library) };
+                        let pos = self.reg(1)?;
                         let name = memory
                             .buffer()
                             .get(pos..)
@@ -344,7 +369,7 @@ impl VM {
                         let name = CStr::from_bytes_until_nul(name)?;
                         // SAFETY: We're using an opaque function pointer.
                         let sym = unsafe { lib.get::<fn()>(name.to_bytes())? };
-                        *self.gpr_mut(0)? = *sym as _;
+                        *self.reg_mut(0)? = *sym as _;
                     }
                 }
                 OpCode::Syscall => {
@@ -353,19 +378,20 @@ impl VM {
                         let mut types = Vec::new();
                         let mut args = Vec::new();
                         let stack_driver = memory.stack_driver()?;
-                        for _ in 0..*self.gpr(1)? {
-                            match stack_driver.read(self.sp)? {
+                        for _ in 0..self.reg(1)? {
+                            match stack_driver.read(self.sp())? {
                                 0 => {
                                     types.push(Type::usize());
-                                    self.sp = checked_sub(self.sp, core::mem::size_of::<usize>())?;
-                                    args.push(libffi::middle::arg(&stack_driver.read(self.sp)?));
+                                    *self.sp_mut() =
+                                        checked_sub(self.sp(), core::mem::size_of::<usize>())?;
+                                    args.push(libffi::middle::arg(&stack_driver.read(self.sp())?));
                                 }
                                 t => return Err(NvmError::FfiTypeError(t)),
                             }
                         }
                         let cif = Cif::new(types, Type::void());
                         // SAFETY: The safety of this operation is documented by it's `Op`.
-                        unsafe { cif.call::<()>(CodePtr(*self.gpr(0)? as _), &args) };
+                        unsafe { cif.call::<()>(CodePtr(self.reg(0)? as _), &args) };
                     }
                 }
                 OpCode::FreeLib => {
@@ -373,7 +399,7 @@ impl VM {
                     {
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         unsafe {
-                            drop(Box::from_raw((*self.gpr(0)?) as *mut Library));
+                            drop(Box::from_raw(self.reg(0)? as *mut Library));
                         }
                     }
                 }

@@ -182,7 +182,7 @@ pub enum OpCode {
 }
 impl OpCode {
     /// Returns the size of this opcode's instruction.
-    #[allow(clippy::arithmetic_side_effects, clippy::arithmetic_side_effects)]
+    #[allow(clippy::arithmetic_side_effects)]
     pub(super) const fn size(&self) -> usize {
         match *self {
             Self::Exit
