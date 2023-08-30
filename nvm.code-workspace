@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"path": "nvm"
+		},
+		{
+			"path": "grim"
+		}
+	],
+	"settings": {
+		"cSpell.words": [
+			"codegen",
+			"libloading",
+			"peekable",
+			"Punct",
+			"syscall",
+			"syscall's",
+			"thiserror",
+			"Uninit"
+		],
+		"dotnet.defaultSolution": "disable"
+	}
+}
