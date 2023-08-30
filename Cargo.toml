@@ -9,10 +9,11 @@ path = "src/bin/main.rs"
 required-features = ["bin"]
 
 [features]
-bin = ["std"]
-std = ["libffi", "libloading", "thiserror"]
+bin = ["libffi", "libloading", "std", "thiserror"]
+std = []
 
 [dependencies]
+bytemuck = "1.13"
 libffi = { version = "3.2", optional = true }
 libloading = { version = "0.8", optional = true }
 num-derive = "0.4"

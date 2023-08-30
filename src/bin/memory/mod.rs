@@ -1,6 +1,7 @@
 //! The virtual memory driver.
-use nvm::{opcode::OpCode, MemoryDriver, NvmError, StackDriver};
-use std::ptr::{addr_of, addr_of_mut};
+use bytemuck::NoUninit;
+use nvm::{opcode::OpCode, MemoryDriver, NvmError};
+use std::ptr::addr_of;
 
 /// The virtual memory driver.
 pub struct Memory {
@@ -20,26 +21,10 @@ impl Memory {
     }
 }
 impl MemoryDriver for Memory {
-    /// The memory driver's stack driver type.
-    type StackDriver<'stack> = Stack<'stack>;
-
     /// Returns an immutable byte slice of the memory driver's buffer.
     #[inline]
     fn buffer(&self) -> &[u8] {
         &self.buffer
-    }
-
-    /// Returns the stack memory driver.
-    fn stack_driver(&mut self) -> Result<Self::StackDriver<'_>, NvmError> {
-        let start = Self::BYTE_COUNT
-            .checked_sub(64)
-            .ok_or(NvmError::OverflowError)?;
-        Ok(Stack {
-            stack: self
-                .buffer
-                .get_mut(start..)
-                .ok_or(NvmError::GetStackError)?,
-        })
     }
 
     /// Reads a value at a specific location in the virtual memory.
@@ -58,6 +43,16 @@ impl MemoryDriver for Memory {
         })
     }
 
+    /// Writes a value to a specific location in the virtual memory.
+    ///
+    /// # Errors
+    ///
+    /// This operation is allowed to fail under any condition.
+    #[inline]
+    fn write<T: NoUninit>(&mut self, pos: usize, value: &T) -> Result<(), NvmError> {
+        self.write_bytes(pos, bytemuck::bytes_of(value))
+    }
+
     /// Writes a slice of bytes to this memory at offset `pos`.
     fn write_bytes(&mut self, pos: usize, buffer: &[u8]) -> Result<(), NvmError> {
         if let Some(end) = pos.checked_add(buffer.len()) {
@@ -70,52 +65,5 @@ impl MemoryDriver for Memory {
             pos,
             len: buffer.len(),
         })
-    }
-}
-
-/// The virtual stack driver.
-pub struct Stack<'stack> {
-    /// A mutable slice of the stack's memory.
-    stack: &'stack mut [u8],
-}
-impl StackDriver for Stack<'_> {
-    /// Reads a [usize] value from a specific location in the virtual stack.
-    fn read(&self, pos: usize) -> Result<usize, NvmError> {
-        let len = self.stack.len();
-        if let Some(pos) = len.checked_sub(pos) {
-            if let Some(byte_ref) = self.stack.get(pos) {
-                if let Some(end) = pos.checked_add(std::mem::size_of::<usize>()) {
-                    if end <= len {
-                        #[allow(clippy::ptr_as_ptr)]
-                        // SAFETY: We've bounds checked the value within `self.stack`.
-                        return unsafe { Ok(std::ptr::read_unaligned(addr_of!(*byte_ref) as _)) };
-                    }
-                }
-            }
-        }
-        Err(NvmError::StackReadError { pos })
-    }
-
-    /// Writes a [usize] value to a specific location in the virtual stack.
-    fn write(&mut self, pos: usize, value: usize) -> Result<(), NvmError> {
-        let len = self.stack.len();
-        if let Some(pos) = len
-            .checked_sub(pos)
-            .and_then(|pos| pos.checked_sub(std::mem::size_of::<usize>()))
-        {
-            if let Some(byte_ref) = self.stack.get_mut(pos) {
-                if let Some(end) = pos.checked_add(std::mem::size_of::<usize>()) {
-                    if end <= len {
-                        // SAFETY: We've bounds checked the write within `self.stack`.
-                        unsafe {
-                            #[allow(clippy::ptr_as_ptr)]
-                            std::ptr::write_unaligned(addr_of_mut!(*byte_ref) as _, value);
-                        }
-                        return Ok(());
-                    }
-                }
-            }
-        }
-        Err(NvmError::StackWriteError { pos })
     }
 }

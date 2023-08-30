@@ -41,6 +41,7 @@
 )]
 pub mod opcode;
 use self::opcode::OpCode;
+use bytemuck::NoUninit;
 use core::{ffi::FromBytesUntilNulError, num::TryFromIntError, str::Utf8Error};
 use num_traits::FromPrimitive;
 #[cfg(feature = "std")]
@@ -122,20 +123,8 @@ pub enum NvmError {
 
 /// A trait that implementors can use to define the behavior of virtual memory reads and writes.
 pub trait MemoryDriver {
-    /// The memory driver's stack driver type.
-    type StackDriver<'stack>: StackDriver
-    where
-        Self: 'stack;
-
     /// Returns an immutable byte slice of the memory driver's buffer.
     fn buffer(&self) -> &[u8];
-
-    /// Returns the stack memory driver.
-    ///
-    /// # Errors
-    ///
-    /// This operation is allowed to fail under any condition.
-    fn stack_driver(&mut self) -> Result<Self::StackDriver<'_>, NvmError>;
 
     /// Reads a value at a specific location in the virtual memory.
     ///
@@ -144,30 +133,19 @@ pub trait MemoryDriver {
     /// This operation is allowed to fail under any condition.
     fn read<T: Copy>(&self, pos: usize) -> Result<T, NvmError>;
 
+    /// Writes a value to a specific location in the virtual memory.
+    ///
+    /// # Errors
+    ///
+    /// This operation is allowed to fail under any condition.
+    fn write<T: NoUninit>(&mut self, pos: usize, value: &T) -> Result<(), NvmError>;
+
     /// Writes a slice of bytes to this memory at offset `pos`.
     ///
     /// # Errors
     ///
     /// This operation is allowed to fail under any condition.
     fn write_bytes(&mut self, pos: usize, buffer: &[u8]) -> Result<(), NvmError>;
-}
-
-/// A trait that implementors can use to define the behavior of virtual stack memory reads and
-/// writes.
-pub trait StackDriver {
-    /// Reads a [usize] value from a specific location in the virtual stack.
-    ///
-    /// # Errors
-    ///
-    /// This operation is allowed to fail under any condition.
-    fn read(&self, pos: usize) -> Result<usize, NvmError>;
-
-    /// Writes a [usize] value to a specific location in the virtual stack.
-    ///
-    /// # Errors
-    ///
-    /// This operation is allowed to fail under any condition.
-    fn write(&mut self, pos: usize, value: usize) -> Result<(), NvmError>;
 }
 
 /// Computes a checked addition operation on a [usize].
@@ -249,6 +227,25 @@ impl VM {
         &mut self.reg[Self::SP]
     }
 
+    /// Pushes a value onto the virtual stack.
+    #[inline]
+    fn push<T: NoUninit>(
+        &mut self,
+        memory: &mut impl MemoryDriver,
+        value: &T,
+    ) -> Result<(), NvmError> {
+        memory.write(self.sp(), value)?;
+        *self.sp_mut() = checked_add(self.sp(), core::mem::size_of::<T>())?;
+        Ok(())
+    }
+
+    /// Pops a value off of the virtual stack.
+    #[inline]
+    fn pop<T: Copy>(&mut self, memory: &mut impl MemoryDriver) -> Result<T, NvmError> {
+        *self.sp_mut() = checked_sub(self.sp(), core::mem::size_of::<T>())?;
+        memory.read(self.sp())
+    }
+
     /// Runs the NVM bytecode on the virtual machine.
     ///
     /// # Errors
@@ -257,6 +254,7 @@ impl VM {
     #[allow(clippy::too_many_lines)]
     pub fn run(mut self, code: &[u8], memory: &mut impl MemoryDriver) -> Result<usize, NvmError> {
         memory.write_bytes(0, code)?;
+        *self.sp_mut() = code.len();
         loop {
             let ip = self.ip();
             let op = memory.read::<u8>(ip)?;
@@ -278,22 +276,9 @@ impl VM {
                     rp = checked_add(rp, 1)?;
                     *r = memory.read::<usize>(rp)?;
                 }
-                OpCode::Push => {
-                    let value = self.reg(memory.read::<u8>(rp)? as _)?;
-                    memory.stack_driver()?.write(self.sp(), value)?;
-                    *self.sp_mut() = checked_add(self.sp(), core::mem::size_of::<usize>())?;
-                }
-                OpCode::PushConst => {
-                    let value = memory.read::<usize>(rp)?;
-                    memory.stack_driver()?.write(self.sp(), value)?;
-                    *self.sp_mut() = checked_add(self.sp(), core::mem::size_of::<usize>())?;
-                }
-                OpCode::Pop => {
-                    let sp = self.sp();
-                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
-                    *r = memory.stack_driver()?.read(sp)?;
-                    *self.sp_mut() = checked_sub(sp, core::mem::size_of::<usize>())?;
-                }
+                OpCode::Push => self.push(memory, &self.reg(memory.read::<u8>(rp)? as _)?)?,
+                OpCode::PushConst => self.push(memory, &memory.read::<usize>(rp)?)?,
+                OpCode::Pop => *self.reg_mut(memory.read::<u8>(rp)? as _)? = self.pop(memory)?,
                 OpCode::Add => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
@@ -377,14 +362,12 @@ impl VM {
                     {
                         let mut types = Vec::new();
                         let mut args = Vec::new();
-                        let stack_driver = memory.stack_driver()?;
                         for _ in 0..self.reg(1)? {
-                            match stack_driver.read(self.sp())? {
+                            match self.pop::<usize>(memory)? {
                                 0 => {
                                     types.push(Type::usize());
-                                    *self.sp_mut() =
-                                        checked_sub(self.sp(), core::mem::size_of::<usize>())?;
-                                    args.push(libffi::middle::arg(&stack_driver.read(self.sp())?));
+                                    let arg = self.pop::<usize>(memory)?;
+                                    args.push(libffi::middle::arg(&arg));
                                 }
                                 t => return Err(NvmError::FfiTypeError(t)),
                             }
