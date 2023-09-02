@@ -276,8 +276,20 @@ impl VM {
                     rp = checked_add(rp, 1)?;
                     *r = memory.read::<usize>(rp)?;
                 }
+                OpCode::Load => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = memory.read::<u8>(rp)? as _;
+                    memory.write(self.reg(left)?, &self.reg(right)?)?;
+                    *self.reg_mut(left)? = memory.read(self.reg(right)?)?;
+                }
+                OpCode::Store => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = memory.read::<u8>(rp)? as _;
+                    memory.write(self.reg(left)?, &self.reg(right)?)?;
+                }
                 OpCode::Push => self.push(memory, &self.reg(memory.read::<u8>(rp)? as _)?)?,
-                OpCode::PushConst => self.push(memory, &memory.read::<usize>(rp)?)?,
                 OpCode::Pop => *self.reg_mut(memory.read::<u8>(rp)? as _)? = self.pop(memory)?,
                 OpCode::Add => {
                     let left = memory.read::<u8>(rp)? as _;
@@ -286,22 +298,12 @@ impl VM {
                     let left = self.reg_mut(left)?;
                     *left = checked_add(*left, right)?;
                 }
-                OpCode::AddConst => {
-                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
-                    rp = checked_add(rp, 1)?;
-                    *r = checked_add(*r, memory.read::<usize>(rp)?)?;
-                }
                 OpCode::Sub => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
                     let right = self.reg(memory.read::<u8>(rp)? as _)?;
                     let left = self.reg_mut(left)?;
                     *left = checked_sub(*left, right)?;
-                }
-                OpCode::SubConst => {
-                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
-                    rp = checked_add(rp, 1)?;
-                    *r = checked_sub(*r, memory.read::<usize>(rp)?)?;
                 }
                 OpCode::Mul => {
                     let left = memory.read::<u8>(rp)? as _;
@@ -310,22 +312,12 @@ impl VM {
                     let left = self.reg_mut(left)?;
                     *left = checked_mul(*left, right)?;
                 }
-                OpCode::MulConst => {
-                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
-                    rp = checked_add(rp, 1)?;
-                    *r = checked_mul(*r, memory.read::<usize>(rp)?)?;
-                }
                 OpCode::Div => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
                     let right = self.reg(memory.read::<u8>(rp)? as _)?;
                     let left = self.reg_mut(left)?;
                     *left = checked_div(*left, right)?;
-                }
-                OpCode::DivConst => {
-                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
-                    rp = checked_add(rp, 1)?;
-                    *r = checked_div(*r, memory.read::<usize>(rp)?)?;
                 }
                 OpCode::LoadLib => {
                     #[cfg(feature = "std")]

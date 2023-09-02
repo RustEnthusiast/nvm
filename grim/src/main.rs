@@ -20,8 +20,8 @@ fn main() -> Result<(), ParseIntError> {
         panic!("failed to read Grim source code from {:?}", cli.file);
     };
     let tokens = lexer::lex(&cli.file.to_string_lossy(), &src);
-    let items = parser::parse(&cli.file.to_string_lossy(), &src, tokens.iter())?;
-    let bytecode = codegen::gen_bytecode(&items);
+    let (items, locations) = parser::parse(&cli.file.to_string_lossy(), &src, tokens.iter())?;
+    let bytecode = codegen::gen_bytecode(&items, &locations);
     let mut out_file = cli.file.clone();
     if !out_file.set_extension("nvm") {
         out_file = out_file.with_extension("nvm");

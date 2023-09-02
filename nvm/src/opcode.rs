@@ -35,18 +35,24 @@ pub enum OpCode {
     ///
     /// - `uint value` - The value to move into the destination register.
     MoveConst,
+    /// Copies a value from memory into a register.
+    ///
+    /// - `u8 i1` - The index of the destination register.
+    ///
+    /// - `u8 i2` - The index of the register holding the memory location.
+    Load,
+    /// Copies a value from a register into memory.
+    ///
+    /// - `u8 i1` - The index of the register holding the memory location.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    Store,
     /// Pushes a value onto the stack.
     ///
     /// # Format arguments
     ///
     /// - `u8 i` - The index of the register that contains the value to push onto the stack.
     Push,
-    /// Pushes a constant value onto the stack.
-    ///
-    /// # Format arguments
-    ///
-    /// - `uint value` - The value to push onto the stack.
-    PushConst,
     /// Pops a value off of the stack into a register.
     ///
     /// # Format arguments
@@ -62,14 +68,6 @@ pub enum OpCode {
     ///
     /// - `u8 i2` - The index of the source register.
     Add,
-    /// Adds a constant `uint` value to the `uint` value in the register at index `i`.
-    ///
-    /// # Format arguments
-    ///
-    /// - `u8 i` - The index of the register to add to.
-    ///
-    /// - `uint value` - The source value.
-    AddConst,
     /// Subtracts the `uint` value in the register at index `i2` from the `uint` value in the
     /// register at index `i1`.
     ///
@@ -79,14 +77,6 @@ pub enum OpCode {
     ///
     /// - `u8 i2` - The index of the source register.
     Sub,
-    /// Subtracts a constant `uint` value from the `uint` value in the register at index `i`.
-    ///
-    /// # Format arguments
-    ///
-    /// - `u8 i` - The index of the register to subtract from.
-    ///
-    /// - `uint value` - The source value.
-    SubConst,
     /// Multiplies the `uint` value in the register at index `i2` with the `uint` value in the
     /// register at index `i1`.
     ///
@@ -96,14 +86,6 @@ pub enum OpCode {
     ///
     /// - `u8 i2` - The index of the source register.
     Mul,
-    /// Multiplies a constant `uint` value with the `uint` value in the register at index `i`.
-    ///
-    /// # Format arguments
-    ///
-    /// - `u8 i` - The index of the register to multiply.
-    ///
-    /// - `uint value` - The source value.
-    MulConst,
     /// Divides the `uint` value in the register at index `i2` by the `uint` value in the
     /// register at index `i1`.
     ///
@@ -113,14 +95,6 @@ pub enum OpCode {
     ///
     /// - `u8 i2` - The index of the source register.
     Div,
-    /// Divides a constant `uint` value by the `uint` value in the register at index `i`.
-    ///
-    /// # Format arguments
-    ///
-    /// - `u8 i` - The index of the register to divide.
-    ///
-    /// - `uint value` - The source value.
-    DivConst,
     /// Loads a native dynamic library.
     ///
     /// The library handle is stored in the register at index 0.
@@ -183,7 +157,7 @@ pub enum OpCode {
 impl OpCode {
     /// Returns the size of this opcode's instruction.
     #[allow(clippy::arithmetic_side_effects)]
-    pub(super) const fn size(&self) -> usize {
+    pub const fn size(&self) -> usize {
         match *self {
             Self::Exit
             | Self::Nop
@@ -192,11 +166,14 @@ impl OpCode {
             | Self::LoadSym
             | Self::FreeLib => 1,
             Self::Jump | Self::Push | Self::Pop => 2,
-            Self::Move | Self::Add | Self::Sub | Self::Mul | Self::Div => 3,
-            Self::PushConst => 1 + core::mem::size_of::<usize>(),
-            Self::MoveConst | Self::AddConst | Self::SubConst | Self::MulConst | Self::DivConst => {
-                2 + core::mem::size_of::<usize>()
-            }
+            Self::Move
+            | Self::Load
+            | Self::Store
+            | Self::Add
+            | Self::Sub
+            | Self::Mul
+            | Self::Div => 3,
+            Self::MoveConst => 2 + core::mem::size_of::<usize>(),
         }
     }
 }
