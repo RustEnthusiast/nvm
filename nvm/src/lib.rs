@@ -280,7 +280,6 @@ impl VM {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
                     let right = memory.read::<u8>(rp)? as _;
-                    memory.write(self.reg(left)?, &self.reg(right)?)?;
                     *self.reg_mut(left)? = memory.read(self.reg(right)?)?;
                 }
                 OpCode::Store => {
