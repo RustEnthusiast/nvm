@@ -136,6 +136,18 @@ fn skip_num(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) {
     }
 }
 
+/// Skips over a comment token.
+fn skip_comment(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) {
+    while let Some(chr) = chars.next() {
+        if chr == '\n' {
+            loc.next(chr);
+            break;
+        } else {
+            unsafe { loc.next_unchecked(chr) };
+        }
+    }
+}
+
 /// Turns Grim source code into a series of low level tokens.
 pub(super) fn lex<'src>(filename: &Cow<str>, src: &'src str) -> Vec<Token<'src>> {
     let mut chars = src.chars().peekable();
@@ -158,6 +170,8 @@ pub(super) fn lex<'src>(filename: &Cow<str>, src: &'src str) -> Vec<Token<'src>>
                 tok: &src[token_loc.byte_pos..loc.byte_pos],
                 ty: TokenType::Num,
             });
+        } else if chr == ';' {
+            skip_comment(&mut chars, &mut loc);
         } else if chr.is_ascii_punctuation() {
             tokens.push(Token {
                 loc: token_loc,
