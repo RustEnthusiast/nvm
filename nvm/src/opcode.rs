@@ -41,12 +41,28 @@ pub enum OpCode {
     ///
     /// - `u8 i2` - The index of the register holding the memory location.
     Load,
+    /// Copies a specific number of bytes from memory into a register.
+    ///
+    /// - `u8 i1` - The index of the destination register.
+    ///
+    /// - `u8 i2` - The index of the register holding the memory location.
+    ///
+    /// - `u8 n` - The number of bytes to transfer.
+    LoadNum,
     /// Copies a value from a register into memory.
     ///
     /// - `u8 i1` - The index of the register holding the memory location.
     ///
     /// - `u8 i2` - The index of the source register.
     Store,
+    /// Copies a specific number of bytes from a register into memory.
+    ///
+    /// - `u8 i1` - The index of the register holding the memory location.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    ///
+    /// - `u8 n` - The number of bytes to transfer.
+    StoreNum,
     /// Pushes a value onto the stack.
     ///
     /// # Format arguments
@@ -173,6 +189,7 @@ impl OpCode {
             | Self::Sub
             | Self::Mul
             | Self::Div => 3,
+            Self::LoadNum | Self::StoreNum => 4,
             Self::MoveConst => 2 + core::mem::size_of::<usize>(),
         }
     }

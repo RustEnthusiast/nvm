@@ -282,11 +282,44 @@ impl VM {
                     let right = memory.read::<u8>(rp)? as _;
                     *self.reg_mut(left)? = memory.read(self.reg(right)?)?;
                 }
+                OpCode::LoadNum => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let n = memory.read::<u8>(rp)? as usize;
+                    let pos = self.reg(right)?;
+                    let mem = &memory.buffer()[pos..pos + n];
+                    let bytes = bytemuck::bytes_of_mut(self.reg_mut(left)?);
+                    #[cfg(target_endian = "little")]
+                    {
+                        bytes[..n].copy_from_slice(mem);
+                        bytes[n..].fill(0);
+                    }
+                    #[cfg(target_endian = "big")]
+                    {
+                        let len = bytes.len();
+                        bytes[len - n..].copy_from_slice(mem);
+                        bytes[..len - n].fill(0);
+                    }
+                }
                 OpCode::Store => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
                     let right = memory.read::<u8>(rp)? as _;
                     memory.write(self.reg(left)?, &self.reg(right)?)?;
+                }
+                OpCode::StoreNum => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let n = memory.read::<u8>(rp)? as usize;
+                    let bytes = self.reg(right)?.to_ne_bytes();
+                    #[cfg(target_endian = "little")]
+                    memory.write_bytes(self.reg(left)?, &bytes[..n])?;
+                    #[cfg(target_endian = "big")]
+                    memory.write_bytes(self.reg(left)?, &bytes[bytes.len() - n..])?;
                 }
                 OpCode::Push => self.push(memory, &self.reg(memory.read::<u8>(rp)? as _)?)?,
                 OpCode::Pop => *self.reg_mut(memory.read::<u8>(rp)? as _)? = self.pop(memory)?,

@@ -1,7 +1,7 @@
 use crate::lexer::{Token, TokenType};
 use ariadne::Color;
 use nvm::opcode::OpCode;
-use std::{borrow::Cow, collections::HashMap, num::ParseIntError, slice::Iter};
+use std::{borrow::Cow, collections::HashMap, num::ParseIntError, slice::Iter, str::FromStr};
 
 /// Describes an NVM constant item.
 #[derive(Clone, Copy)]
@@ -26,8 +26,12 @@ pub(super) enum Instruction<'tok> {
     MoveConst(u8, Const<'tok>),
     /// The `load` instruction.
     Load(u8, u8),
+    /// The `loadn` instruction.
+    LoadNum(u8, u8, u8),
     /// The `store` instruction.
     Store(u8, u8),
+    /// The `storen` instruction.
+    StoreNum(u8, u8, u8),
     /// The `push` instruction.
     Push(u8),
     /// The `pop` instruction.
@@ -59,7 +63,9 @@ impl Instruction<'_> {
             Instruction::Move(_, _) => OpCode::Move.size(),
             Instruction::MoveConst(_, _) => OpCode::MoveConst.size(),
             Instruction::Load(_, _) => OpCode::Load.size(),
+            Instruction::LoadNum(_, _, _) => OpCode::LoadNum.size(),
             Instruction::Store(_, _) => OpCode::Store.size(),
+            Instruction::StoreNum(_, _, _) => OpCode::StoreNum.size(),
             Instruction::Push(_) => OpCode::Push.size(),
             Instruction::Pop(_) => OpCode::Pop.size(),
             Instruction::Add(_, _) => OpCode::Add.size(),
@@ -133,6 +139,44 @@ fn next_reg_ident<'tok, 'src>(
     }
 }
 
+/// Makes sure a token is an numeric constant.
+fn assert_num<F: FromStr>(
+    filename: &Cow<str>,
+    src: &str,
+    token: &Token,
+    num_token: &Token,
+) -> Result<F, F::Err> {
+    if num_token.ty() != TokenType::Num {
+        let label = token.label(filename, "Instruction encountered here.", Color::Blue);
+        let num_label = num_token.label(filename, "Invalid token encountered here.", Color::Red);
+        crate::grim_error(
+            (filename, src, num_token.loc().byte_pos()),
+            "Expected a numeric constant as an instruction operand.",
+            [label, num_label],
+            None,
+        );
+    }
+    num_token.tok().parse()
+}
+
+/// Consumes an numeric constant.
+fn next_num<F: FromStr>(
+    filename: &Cow<str>,
+    src: &str,
+    token: &Token,
+    tokens: &mut Iter<Token>,
+) -> Result<F, F::Err> {
+    match tokens.next() {
+        Some(num_token) => assert_num(filename, src, token, num_token),
+        _ => crate::grim_error(
+            (filename, src, token.loc().byte_pos()),
+            "Expected a numeric constant as an instruction operand.",
+            [token.label(filename, "Instruction encountered here.", Color::Red)],
+            None,
+        ),
+    }
+}
+
 /// Makes sure a token is a constant.
 fn assert_const<'tok>(
     filename: &Cow<str>,
@@ -178,7 +222,7 @@ fn next_const<'tok>(
 /// Makes sure a token is an operand separator.
 fn assert_op_separator(filename: &Cow<str>, src: &str, op_token: &Token, sep_token: &Token) {
     if sep_token.ty() != TokenType::Punct || sep_token.tok() != "," {
-        let op_label = op_token.label(filename, "First operand encountered here.", Color::Blue);
+        let op_label = op_token.label(filename, "Operand encountered here.", Color::Blue);
         let sep_label = sep_token.label(filename, "Invalid token encountered here.", Color::Red);
         crate::grim_error(
             (filename, src, sep_token.loc().byte_pos()),
@@ -234,11 +278,27 @@ fn next_instruction<'tok>(
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Load(r1, r2)))
         }
+        "loadn" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let n = next_num(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::LoadNum(r1, r2, n)))
+        }
         "store" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
             next_op_separator(filename, src, reg_tok, tokens);
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Store(r1, r2)))
+        }
+        "storen" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let n = next_num(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::StoreNum(r1, r2, n)))
         }
         "push" => {
             let (r, _) = next_reg_ident(filename, src, token, tokens);

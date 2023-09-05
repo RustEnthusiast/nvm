@@ -27,8 +27,14 @@ pub(super) fn gen_bytecode(items: &[Item], locations: &HashMap<&str, usize>) -> 
             Item::Instruction(Instruction::Load(r1, r2)) => {
                 bytes.extend([OpCode::Load as _, r1, r2]);
             }
+            Item::Instruction(Instruction::LoadNum(r1, r2, n)) => {
+                bytes.extend([OpCode::LoadNum as _, r1, r2, n]);
+            }
             Item::Instruction(Instruction::Store(r1, r2)) => {
                 bytes.extend([OpCode::Store as _, r1, r2]);
+            }
+            Item::Instruction(Instruction::StoreNum(r1, r2, n)) => {
+                bytes.extend([OpCode::StoreNum as _, r1, r2, n]);
             }
             Item::Instruction(Instruction::Push(r)) => bytes.extend([OpCode::Push as _, r]),
             Item::Instruction(Instruction::Pop(r)) => bytes.extend([OpCode::Pop as _, r]),
