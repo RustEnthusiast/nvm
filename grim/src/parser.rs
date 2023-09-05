@@ -19,7 +19,7 @@ pub(super) enum Instruction<'tok> {
     /// The `nop` instruction.
     Nop,
     /// The `jump` instruction.
-    Jump(u8),
+    Jump(Const<'tok>),
     /// The `move` instruction.
     Move(u8, u8),
     /// The `movec` instruction.
@@ -257,8 +257,8 @@ fn next_instruction<'tok>(
         "exit" => Ok(Ok(Instruction::Exit)),
         "nop" => Ok(Ok(Instruction::Nop)),
         "jump" => {
-            let (r, _) = next_reg_ident(filename, src, token, tokens);
-            Ok(Ok(Instruction::Jump(r)))
+            let n = next_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::Jump(n)))
         }
         "move" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);

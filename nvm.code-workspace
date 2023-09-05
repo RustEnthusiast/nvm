@@ -6,5 +6,8 @@
 		{
 			"path": "grim"
 		}
-	]
+	],
+	"settings": {
+		"rust-analyzer.cargo.features": "all"
+	}
 }

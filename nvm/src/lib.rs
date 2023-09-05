@@ -264,7 +264,7 @@ impl VM {
             match opcode {
                 OpCode::Exit => return self.reg(0),
                 OpCode::Nop => {}
-                OpCode::Jump => *self.ip_mut() = self.reg(memory.read::<u8>(rp)? as _)?,
+                OpCode::Jump => *self.ip_mut() = memory.read(rp)?,
                 OpCode::Move => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;

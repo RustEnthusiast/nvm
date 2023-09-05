@@ -13,11 +13,11 @@ pub enum OpCode {
     Exit,
     /// No operation, does nothing.
     Nop,
-    /// Jumps to another location in memory.
+    /// Jumps to a location in memory.
     ///
     /// # Format arguments
     ///
-    /// - `u8 i` - The index of the register that contains the memory location to jump to.
+    /// - `uint i` - The memory location to jump to.
     Jump,
     /// Copies the value of one register to another.
     ///
@@ -181,7 +181,7 @@ impl OpCode {
             | Self::LoadLib
             | Self::LoadSym
             | Self::FreeLib => 1,
-            Self::Jump | Self::Push | Self::Pop => 2,
+            Self::Push | Self::Pop => 2,
             Self::Move
             | Self::Load
             | Self::Store
@@ -190,6 +190,7 @@ impl OpCode {
             | Self::Mul
             | Self::Div => 3,
             Self::LoadNum | Self::StoreNum => 4,
+            Self::Jump => 1 + core::mem::size_of::<usize>(),
             Self::MoveConst => 2 + core::mem::size_of::<usize>(),
         }
     }

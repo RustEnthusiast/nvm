@@ -2,6 +2,21 @@ use crate::parser::{Const, Instruction, Item};
 use nvm::opcode::OpCode;
 use std::collections::HashMap;
 
+/// Gets a numeric constant or the location of an identifier.
+///
+/// # Panics
+///
+/// This operation panics if the identifier could not be found.
+fn get_const(n: &Const, locations: &HashMap<&str, usize>) -> usize {
+    match n {
+        Const::Num(n) => *n,
+        Const::Ident(ident) => match locations.get(ident) {
+            Some(loc) => *loc,
+            _ => panic!("failed to get the location of `{ident}`"),
+        },
+    }
+}
+
 /// Generates NVM bytecode from a collection of items.
 pub(super) fn gen_bytecode(items: &[Item], locations: &HashMap<&str, usize>) -> Vec<u8> {
     let mut bytes = Vec::new();
@@ -9,19 +24,17 @@ pub(super) fn gen_bytecode(items: &[Item], locations: &HashMap<&str, usize>) -> 
         match *item {
             Item::Instruction(Instruction::Exit) => bytes.push(OpCode::Exit as _),
             Item::Instruction(Instruction::Nop) => bytes.push(OpCode::Nop as _),
-            Item::Instruction(Instruction::Jump(r)) => bytes.extend([OpCode::Jump as _, r]),
+            Item::Instruction(Instruction::Jump(n)) => {
+                bytes.push(OpCode::Jump as _);
+                let n = get_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
             Item::Instruction(Instruction::Move(r1, r2)) => {
                 bytes.extend([OpCode::Move as _, r1, r2]);
             }
             Item::Instruction(Instruction::MoveConst(r, n)) => {
                 bytes.extend([OpCode::MoveConst as _, r]);
-                let n = match n {
-                    Const::Num(n) => n,
-                    Const::Ident(ident) => match locations.get(ident) {
-                        Some(loc) => *loc,
-                        _ => panic!("failed to get the location of `{ident}`"),
-                    },
-                };
+                let n = get_const(&n, locations);
                 bytes.extend(bytemuck::bytes_of(&n));
             }
             Item::Instruction(Instruction::Load(r1, r2)) => {
