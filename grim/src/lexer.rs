@@ -54,6 +54,8 @@ pub(super) enum TokenType {
     Num,
     /// A punctuation token.
     Punct,
+    /// A string token.
+    String,
 }
 
 /// Describes a standalone token within Grim source code.
@@ -148,6 +150,19 @@ fn skip_comment(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) {
     }
 }
 
+/// Skips over a string token.
+fn skip_string(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) -> bool {
+    while let Some(chr) = chars.next() {
+        loc.next(chr);
+        if chr == '\\' {
+            chars.next().map(|chr| loc.next(chr));
+        } else if chr == '\"' {
+            return true;
+        }
+    }
+    false
+}
+
 /// Turns Grim source code into a series of low level tokens.
 pub(super) fn lex<'src>(filename: &Cow<str>, src: &'src str) -> Vec<Token<'src>> {
     let mut chars = src.chars().peekable();
@@ -172,6 +187,22 @@ pub(super) fn lex<'src>(filename: &Cow<str>, src: &'src str) -> Vec<Token<'src>>
             });
         } else if chr == ';' {
             skip_comment(&mut chars, &mut loc);
+        } else if chr == '\"' {
+            let ended = skip_string(&mut chars, &mut loc);
+            let token = Token {
+                loc: token_loc,
+                tok: &src[token_loc.byte_pos..loc.byte_pos],
+                ty: TokenType::String,
+            };
+            if !ended {
+                crate::grim_error(
+                    (filename, src, token_loc.byte_pos),
+                    "String literal never ends.",
+                    [token.label(filename, "String literal encountered here.", Color::Red)],
+                    Some("Add a string delimiter (\") at the end of the string."),
+                );
+            }
+            tokens.push(token);
         } else if chr.is_ascii_punctuation() {
             tokens.push(Token {
                 loc: token_loc,

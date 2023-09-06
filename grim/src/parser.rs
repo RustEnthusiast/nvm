@@ -80,22 +80,20 @@ impl Instruction<'_> {
     }
 }
 
+/// Describes a static item.
+pub(super) enum Static {
+    /// A numeric constant.
+    Num(usize),
+    /// A string literal.
+    String(String),
+}
+
 /// Describes an NVM item.
 pub(super) enum Item<'tok> {
     /// An instruction.
     Instruction(Instruction<'tok>),
-}
-
-/// Makes sure that `token` is an identifier token.
-fn assert_ident(filename: &Cow<str>, src: &str, token: &Token) {
-    if token.ty() != TokenType::Ident {
-        crate::grim_error(
-            (filename, src, token.loc().byte_pos()),
-            "Expected an identifier.",
-            [token.label(filename, "Unexpected token encountered here.", Color::Red)],
-            None,
-        );
-    }
+    /// A static item.
+    Static(Static),
 }
 
 /// Makes sure a token is a valid register identifier.
@@ -350,15 +348,43 @@ pub(super) fn parse<'tok>(
     let mut loc = 0usize;
     let mut locations = HashMap::new();
     while let Some(token) = tokens.next() {
-        assert_ident(filename, src, token);
-        match next_instruction(filename, src, token, &mut tokens)? {
-            Ok(instruction) => {
-                loc += instruction.size();
-                items.push(Item::Instruction(instruction));
+        match token.ty() {
+            TokenType::Ident => match next_instruction(filename, src, token, &mut tokens)? {
+                Ok(instruction) => {
+                    loc += instruction.size();
+                    items.push(Item::Instruction(instruction));
+                }
+                Err(ident) => {
+                    locations.insert(ident, loc);
+                }
+            },
+            TokenType::Num => {
+                loc += core::mem::size_of::<usize>();
+                items.push(Item::Static(Static::Num(token.tok().parse()?)));
             }
-            Err(ident) => {
-                locations.insert(ident, loc);
+            TokenType::String => {
+                let s = token.tok();
+                let mut chars = s[1..s.len() - 1].chars();
+                let mut s = String::with_capacity(s.len());
+                while let Some(c) = chars.next() {
+                    if c == '\\' {
+                        match chars.next() {
+                            Some('0') => s.push('\0'),
+                            _ => {}
+                        }
+                    } else {
+                        s.push(c);
+                    }
+                }
+                loc += s.len();
+                items.push(Item::Static(Static::String(s)));
             }
+            _ => crate::grim_error(
+                (filename, src, token.loc().byte_pos()),
+                "Expected an identifier or a static literal.",
+                [token.label(filename, "Unexpected token encountered here.", Color::Red)],
+                None,
+            ),
         }
     }
     Ok((items, locations))

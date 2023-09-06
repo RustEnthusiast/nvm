@@ -1,4 +1,4 @@
-use crate::parser::{Const, Instruction, Item};
+use crate::parser::{Const, Instruction, Item, Static};
 use nvm::opcode::OpCode;
 use std::collections::HashMap;
 
@@ -18,10 +18,15 @@ fn get_const(n: &Const, locations: &HashMap<&str, usize>) -> usize {
 }
 
 /// Generates NVM bytecode from a collection of items.
-pub(super) fn gen_bytecode(items: &[Item], locations: &HashMap<&str, usize>) -> Vec<u8> {
+pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
+    items: I,
+    locations: &HashMap<&str, usize>,
+) -> Vec<u8> {
     let mut bytes = Vec::new();
     for item in items {
-        match *item {
+        match item {
+            Item::Static(Static::Num(n)) => bytes.extend(bytemuck::bytes_of(&n)),
+            Item::Static(Static::String(s)) => bytes.extend(s.as_bytes()),
             Item::Instruction(Instruction::Exit) => bytes.push(OpCode::Exit as _),
             Item::Instruction(Instruction::Nop) => bytes.push(OpCode::Nop as _),
             Item::Instruction(Instruction::Jump(n)) => {

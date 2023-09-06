@@ -21,7 +21,7 @@ fn main() -> Result<(), ParseIntError> {
     };
     let tokens = lexer::lex(&cli.file.to_string_lossy(), &src);
     let (items, locations) = parser::parse(&cli.file.to_string_lossy(), &src, tokens.iter())?;
-    let bytecode = codegen::gen_bytecode(&items, &locations);
+    let bytecode = codegen::gen_bytecode(items, &locations);
     let mut out_file = cli.file.clone();
     if !out_file.set_extension("nvm") {
         out_file = out_file.with_extension("nvm");
