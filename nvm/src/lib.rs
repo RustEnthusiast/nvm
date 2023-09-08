@@ -262,7 +262,7 @@ impl VM {
             let mut rp = checked_add(ip, 1)?;
             *self.ip_mut() = checked_add(ip, opcode.size())?;
             match opcode {
-                OpCode::Exit => return self.reg(0),
+                OpCode::Exit => return self.reg(memory.read::<u8>(rp)? as _),
                 OpCode::Nop => {}
                 OpCode::Jump => *self.ip_mut() = memory.read(rp)?,
                 OpCode::Move => {

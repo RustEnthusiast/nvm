@@ -15,7 +15,7 @@ pub(super) enum Const<'tok> {
 /// Describes an NVM instruction.
 pub(super) enum Instruction<'tok> {
     /// The `exit` instruction.
-    Exit,
+    Exit(u8),
     /// The `nop` instruction.
     Nop,
     /// The `jump` instruction.
@@ -57,7 +57,7 @@ impl Instruction<'_> {
     /// Gets the instruction's size.
     const fn size(&self) -> usize {
         match self {
-            Instruction::Exit => OpCode::Exit.size(),
+            Instruction::Exit(_) => OpCode::Exit.size(),
             Instruction::Nop => OpCode::Nop.size(),
             Instruction::Jump(_) => OpCode::Jump.size(),
             Instruction::Move(_, _) => OpCode::Move.size(),
@@ -252,7 +252,10 @@ fn next_instruction<'tok>(
     tokens: &mut Iter<'tok, Token>,
 ) -> Result<Result<Instruction<'tok>, &'tok str>, ParseIntError> {
     match token.tok() {
-        "exit" => Ok(Ok(Instruction::Exit)),
+        "exit" => {
+            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Exit(r)))
+        }
         "nop" => Ok(Ok(Instruction::Nop)),
         "jump" => {
             let n = next_const(filename, src, token, tokens)?;

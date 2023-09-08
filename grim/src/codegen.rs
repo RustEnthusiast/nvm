@@ -27,7 +27,7 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
         match item {
             Item::Static(Static::Num(n)) => bytes.extend(bytemuck::bytes_of(&n)),
             Item::Static(Static::String(s)) => bytes.extend(s.as_bytes()),
-            Item::Instruction(Instruction::Exit) => bytes.push(OpCode::Exit as _),
+            Item::Instruction(Instruction::Exit(r)) => bytes.extend([OpCode::Exit as _, r]),
             Item::Instruction(Instruction::Nop) => bytes.push(OpCode::Nop as _),
             Item::Instruction(Instruction::Jump(n)) => {
                 bytes.push(OpCode::Jump as _);

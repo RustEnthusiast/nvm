@@ -7,9 +7,9 @@ use num_derive::FromPrimitive;
 pub enum OpCode {
     /// Exits the program with a given exit code.
     ///
-    /// # Register arguments
+    /// # Format arguments
     ///
-    /// - `R0` - The `uint` value to exit the program with.
+    /// - `u8 i` - The index of the register holding the value to exit the program with.
     Exit,
     /// No operation, does nothing.
     Nop,
@@ -132,10 +132,10 @@ pub enum OpCode {
     ///
     /// # Format arguments
     ///
-    /// - `i1` - The index of the register that holds the memory location of the null-terminated C
+    /// - `u8 i1` - The index of the register that holds the memory location of the null-terminated C
     /// string containing to the name of the symbol to load.
     ///
-    /// - `i2` - The index of the register that holds a handle to the native library to load the
+    /// - `u8 i2` - The index of the register that holds a handle to the native library to load the
     /// symbol from.
     ///
     /// # Safety
@@ -156,15 +156,15 @@ pub enum OpCode {
     ///
     /// # Format arguments
     ///
-    /// - `i1` - The index of the register containing the symbol to call.
+    /// - `u8 i1` - The index of the register containing the symbol to call.
     ///
-    /// - `i2` - The index of the register containing the number of arguments the symbol takes.
+    /// - `u8 i2` - The index of the register containing the number of arguments the symbol takes.
     Syscall,
     /// Frees a loaded native dynamic library.
     ///
     /// # Format arguments
     ///
-    /// - `i` - The index of the register holding a handle to the native library to free.
+    /// - `u8 i` - The index of the register holding a handle to the native library to free.
     ///
     /// # Safety
     ///
@@ -176,8 +176,8 @@ impl OpCode {
     #[allow(clippy::arithmetic_side_effects)]
     pub const fn size(&self) -> usize {
         match *self {
-            Self::Exit | Self::Nop => 1,
-            Self::Push | Self::Pop | Self::LoadLib | Self::FreeLib => 2,
+            Self::Nop => 1,
+            Self::Exit | Self::Push | Self::Pop | Self::LoadLib | Self::FreeLib => 2,
             Self::Move
             | Self::Load
             | Self::Store
