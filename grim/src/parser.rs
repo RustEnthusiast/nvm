@@ -45,13 +45,13 @@ pub(super) enum Instruction<'tok> {
     /// The `div` instruction.
     Div(u8, u8),
     /// The `loadlib` instruction.
-    LoadLib,
+    LoadLib(u8),
     /// The `loadsym` instruction.
-    LoadSym,
+    LoadSym(u8, u8),
     /// The `syscall` instruction.
-    Syscall,
+    Syscall(u8, u8),
     /// The `freelib` instruction.
-    FreeLib,
+    FreeLib(u8),
 }
 impl Instruction<'_> {
     /// Gets the instruction's size.
@@ -72,10 +72,10 @@ impl Instruction<'_> {
             Instruction::Sub(_, _) => OpCode::Sub.size(),
             Instruction::Mul(_, _) => OpCode::Mul.size(),
             Instruction::Div(_, _) => OpCode::Div.size(),
-            Instruction::LoadLib => OpCode::LoadLib.size(),
-            Instruction::LoadSym => OpCode::LoadSym.size(),
-            Instruction::Syscall => OpCode::Syscall.size(),
-            Instruction::FreeLib => OpCode::FreeLib.size(),
+            Instruction::LoadLib(_) => OpCode::LoadLib.size(),
+            Instruction::LoadSym(_, _) => OpCode::LoadSym.size(),
+            Instruction::Syscall(_, _) => OpCode::Syscall.size(),
+            Instruction::FreeLib(_) => OpCode::FreeLib.size(),
         }
     }
 }
@@ -330,10 +330,26 @@ fn next_instruction<'tok>(
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Div(r1, r2)))
         }
-        "loadlib" => Ok(Ok(Instruction::LoadLib)),
-        "loadsym" => Ok(Ok(Instruction::LoadSym)),
-        "syscall" => Ok(Ok(Instruction::Syscall)),
-        "freelib" => Ok(Ok(Instruction::FreeLib)),
+        "loadlib" => {
+            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::LoadLib(r)))
+        }
+        "loadsym" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::LoadSym(r1, r2)))
+        }
+        "syscall" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Syscall(r1, r2)))
+        }
+        "freelib" => {
+            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::FreeLib(r)))
+        }
         ident => Ok(Err(ident)),
     }
 }

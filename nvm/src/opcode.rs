@@ -113,35 +113,36 @@ pub enum OpCode {
     Div,
     /// Loads a native dynamic library.
     ///
-    /// The library handle is stored in the register at index 0.
+    /// The library handle is stored in the register at index `i`.
     ///
-    /// # Register arguments
+    /// # Format arguments
     ///
-    /// - `R0` - The memory location of the null-terminated C string containing to the name of the
-    /// library to load.
+    /// - `u8 i` - The index of the register that holds the memory location of the null-terminated
+    /// C string containing to the name of the library to load.
     ///
     /// # Safety
     ///
     /// - Unsafe initialization routines may be ran when the library is loaded.
     ///
-    /// - `R0` must point to a null terminated sequence of bytes.
+    /// - `i` must point to a null terminated sequence of bytes.
     LoadLib,
     /// Loads a native library symbol.
     ///
-    /// The library symbol is stored in the register at index 0.
+    /// The library symbol is stored in the register at index `i1`.
     ///
-    /// # Register arguments
+    /// # Format arguments
     ///
-    /// - `R0` - A handle to the native library to load the symbol from.
+    /// - `i1` - The index of the register that holds the memory location of the null-terminated C
+    /// string containing to the name of the symbol to load.
     ///
-    /// - `R1` - The memory location of the null-terminated C string containing to the name of the
-    /// symbol to load.
+    /// - `i2` - The index of the register that holds a handle to the native library to load the
+    /// symbol from.
     ///
     /// # Safety
     ///
-    /// - `R0` must contain a valid handle to a native system library.
+    /// - `i1` must point to a null terminated sequence of bytes.
     ///
-    /// - `R1` must point to a null terminated sequence of bytes.
+    /// - `i2` must contain a valid handle to a native system library.
     LoadSym,
     /// Makes a C call to a native external library symbol.
     ///
@@ -153,21 +154,21 @@ pub enum OpCode {
     ///
     /// - 0 - `uint`
     ///
-    /// # Register arguments
+    /// # Format arguments
     ///
-    /// - `R0` - The symbol to call.
+    /// - `i1` - The index of the register containing the symbol to call.
     ///
-    /// - `R1` - The number of arguments the symbol takes.
+    /// - `i2` - The index of the register containing the number of arguments the symbol takes.
     Syscall,
     /// Frees a loaded native dynamic library.
     ///
-    /// # Register arguments
+    /// # Format arguments
     ///
-    /// - `R0` - A handle to the native library to free.
+    /// - `i` - The index of the register holding a handle to the native library to free.
     ///
     /// # Safety
     ///
-    /// - `R0` must contain a valid handle to a native system library.
+    /// - `i` must contain a valid handle to a native system library.
     FreeLib,
 }
 impl OpCode {
@@ -175,20 +176,17 @@ impl OpCode {
     #[allow(clippy::arithmetic_side_effects)]
     pub const fn size(&self) -> usize {
         match *self {
-            Self::Exit
-            | Self::Nop
-            | Self::Syscall
-            | Self::LoadLib
-            | Self::LoadSym
-            | Self::FreeLib => 1,
-            Self::Push | Self::Pop => 2,
+            Self::Exit | Self::Nop => 1,
+            Self::Push | Self::Pop | Self::LoadLib | Self::FreeLib => 2,
             Self::Move
             | Self::Load
             | Self::Store
             | Self::Add
             | Self::Sub
             | Self::Mul
-            | Self::Div => 3,
+            | Self::Div
+            | Self::LoadSym
+            | Self::Syscall => 3,
             Self::LoadNum | Self::StoreNum => 4,
             Self::Jump => 1 + core::mem::size_of::<usize>(),
             Self::MoveConst => 2 + core::mem::size_of::<usize>(),

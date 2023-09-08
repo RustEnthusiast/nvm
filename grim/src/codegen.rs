@@ -60,10 +60,14 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             Item::Instruction(Instruction::Sub(r1, r2)) => bytes.extend([OpCode::Sub as _, r1, r2]),
             Item::Instruction(Instruction::Mul(r1, r2)) => bytes.extend([OpCode::Mul as _, r1, r2]),
             Item::Instruction(Instruction::Div(r1, r2)) => bytes.extend([OpCode::Div as _, r1, r2]),
-            Item::Instruction(Instruction::LoadLib) => bytes.push(OpCode::LoadLib as _),
-            Item::Instruction(Instruction::LoadSym) => bytes.push(OpCode::LoadSym as _),
-            Item::Instruction(Instruction::Syscall) => bytes.push(OpCode::Syscall as _),
-            Item::Instruction(Instruction::FreeLib) => bytes.push(OpCode::FreeLib as _),
+            Item::Instruction(Instruction::LoadLib(r)) => bytes.extend([OpCode::LoadLib as _, r]),
+            Item::Instruction(Instruction::LoadSym(r1, r2)) => {
+                bytes.extend([OpCode::LoadSym as _, r1, r2]);
+            }
+            Item::Instruction(Instruction::Syscall(r1, r2)) => {
+                bytes.extend([OpCode::Syscall as _, r1, r2]);
+            }
+            Item::Instruction(Instruction::FreeLib(r)) => bytes.extend([OpCode::FreeLib as _, r]),
         }
     }
     bytes

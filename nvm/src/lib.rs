@@ -354,7 +354,8 @@ impl VM {
                 OpCode::LoadLib => {
                     #[cfg(feature = "std")]
                     {
-                        let pos = self.reg(0)?;
+                        let r = memory.read::<u8>(rp)? as _;
+                        let pos = self.reg(r)?;
                         let name = memory
                             .buffer()
                             .get(pos..)
@@ -362,15 +363,18 @@ impl VM {
                         let name = CStr::from_bytes_until_nul(name)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         let lib = unsafe { Box::into_raw(Box::new(Library::new(name.to_str()?)?)) };
-                        *self.reg_mut(0)? = lib as _;
+                        *self.reg_mut(r)? = lib as _;
                     }
                 }
                 OpCode::LoadSym => {
                     #[cfg(feature = "std")]
                     {
+                        let left = memory.read::<u8>(rp)? as _;
+                        rp = checked_add(rp, 1)?;
+                        let right = self.reg(memory.read::<u8>(rp)? as _)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
-                        let lib = unsafe { &*(self.reg(0)? as *const Library) };
-                        let pos = self.reg(1)?;
+                        let lib = unsafe { &*(right as *const Library) };
+                        let pos = self.reg(left)?;
                         let name = memory
                             .buffer()
                             .get(pos..)
@@ -378,15 +382,18 @@ impl VM {
                         let name = CStr::from_bytes_until_nul(name)?;
                         // SAFETY: We're using an opaque function pointer.
                         let sym = unsafe { lib.get::<fn()>(name.to_bytes())? };
-                        *self.reg_mut(0)? = *sym as _;
+                        *self.reg_mut(left)? = *sym as _;
                     }
                 }
                 OpCode::Syscall => {
                     #[cfg(feature = "std")]
                     {
+                        let left = self.reg(memory.read::<u8>(rp)? as _)?;
+                        rp = checked_add(rp, 1)?;
+                        let right = self.reg(memory.read::<u8>(rp)? as _)?;
                         let mut types = Vec::new();
                         let mut args = Vec::new();
-                        for _ in 0..self.reg(1)? {
+                        for _ in 0..right {
                             match self.pop::<usize>(memory)? {
                                 0 => {
                                     types.push(Type::usize());
@@ -398,15 +405,16 @@ impl VM {
                         }
                         let cif = Cif::new(types, Type::void());
                         // SAFETY: The safety of this operation is documented by it's `Op`.
-                        unsafe { cif.call::<()>(CodePtr(self.reg(0)? as _), &args) };
+                        unsafe { cif.call::<()>(CodePtr(left as _), &args) };
                     }
                 }
                 OpCode::FreeLib => {
                     #[cfg(feature = "std")]
                     {
+                        let r = self.reg(memory.read::<u8>(rp)? as _)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         unsafe {
-                            drop(Box::from_raw(self.reg(0)? as *mut Library));
+                            drop(Box::from_raw(r as *mut Library));
                         }
                     }
                 }
