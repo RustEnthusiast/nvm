@@ -69,12 +69,28 @@ pub enum OpCode {
     ///
     /// - `u8 i` - The index of the register that contains the value to push onto the stack.
     Push,
+    /// Pushes a specific number of bytes from a register onto the stack.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i` - The index of the register that contains the value to push onto the stack.
+    ///
+    /// - `u8 n` - The number of bytes to push.
+    PushNum,
     /// Pops a value off of the stack into a register.
     ///
     /// # Format arguments
     ///
     /// - `u8 i` - The index of the register to pop data into.
     Pop,
+    /// Pops a specific number of bytes off of the stack into a register.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i` - The index of the register to pop data into.
+    ///
+    /// - `u8 n` - The number of bytes to pop.
+    PopNum,
     /// Adds the `uint` value in the register at index `i2` to the `uint` value in the register at
     /// index `i1`.
     ///
@@ -181,6 +197,8 @@ impl OpCode {
             Self::Move
             | Self::Load
             | Self::Store
+            | Self::PushNum
+            | Self::PopNum
             | Self::Add
             | Self::Sub
             | Self::Mul

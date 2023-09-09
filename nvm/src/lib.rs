@@ -322,7 +322,37 @@ impl VM {
                     memory.write_bytes(self.reg(left)?, &bytes[bytes.len() - n..])?;
                 }
                 OpCode::Push => self.push(memory, &self.reg(memory.read::<u8>(rp)? as _)?)?,
+                OpCode::PushNum => {
+                    let r = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let n = memory.read::<u8>(rp)? as usize;
+                    let bytes = self.reg(r)?.to_ne_bytes();
+                    #[cfg(target_endian = "little")]
+                    memory.write_bytes(self.sp(), &bytes[..n])?;
+                    #[cfg(target_endian = "big")]
+                    memory.write_bytes(self.sp(), &bytes[bytes.len() - n..])?;
+                    *self.sp_mut() = checked_add(self.sp(), 1)?;
+                }
                 OpCode::Pop => *self.reg_mut(memory.read::<u8>(rp)? as _)? = self.pop(memory)?,
+                OpCode::PopNum => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let n = memory.read::<u8>(rp)? as usize;
+                    let pos = checked_sub(self.sp(), n)?;
+                    let mem = &memory.buffer()[pos..pos + n];
+                    let bytes = bytemuck::bytes_of_mut(self.reg_mut(left)?);
+                    #[cfg(target_endian = "little")]
+                    {
+                        bytes[..n].copy_from_slice(mem);
+                        bytes[n..].fill(0);
+                    }
+                    #[cfg(target_endian = "big")]
+                    {
+                        let len = bytes.len();
+                        bytes[len - n..].copy_from_slice(mem);
+                        bytes[..len - n].fill(0);
+                    }
+                }
                 OpCode::Add => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;

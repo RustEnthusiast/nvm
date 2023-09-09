@@ -34,8 +34,12 @@ pub(super) enum Instruction<'tok> {
     StoreNum(u8, u8, u8),
     /// The `push` instruction.
     Push(u8),
+    /// The `pushn` instruction.
+    PushNum(u8, u8),
     /// The `pop` instruction.
     Pop(u8),
+    /// The `popn` instruction.
+    PopNum(u8, u8),
     /// The `add` instruction.
     Add(u8, u8),
     /// The `sub` instruction.
@@ -67,7 +71,9 @@ impl Instruction<'_> {
             Instruction::Store(_, _) => OpCode::Store.size(),
             Instruction::StoreNum(_, _, _) => OpCode::StoreNum.size(),
             Instruction::Push(_) => OpCode::Push.size(),
+            Instruction::PushNum(_, _) => OpCode::PushNum.size(),
             Instruction::Pop(_) => OpCode::Pop.size(),
+            Instruction::PopNum(_, _) => OpCode::PopNum.size(),
             Instruction::Add(_, _) => OpCode::Add.size(),
             Instruction::Sub(_, _) => OpCode::Sub.size(),
             Instruction::Mul(_, _) => OpCode::Mul.size(),
@@ -305,9 +311,21 @@ fn next_instruction<'tok>(
             let (r, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Push(r)))
         }
+        "pushn" => {
+            let (r, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let n = next_num(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::PushNum(r, n)))
+        }
         "pop" => {
             let (r, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Pop(r)))
+        }
+        "popn" => {
+            let (r, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let n = next_num(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::PopNum(r, n)))
         }
         "add" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);

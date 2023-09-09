@@ -55,7 +55,13 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
                 bytes.extend([OpCode::StoreNum as _, r1, r2, n]);
             }
             Item::Instruction(Instruction::Push(r)) => bytes.extend([OpCode::Push as _, r]),
+            Item::Instruction(Instruction::PushNum(r, n)) => {
+                bytes.extend([OpCode::PushNum as _, r, n]);
+            }
             Item::Instruction(Instruction::Pop(r)) => bytes.extend([OpCode::Pop as _, r]),
+            Item::Instruction(Instruction::PopNum(r, n)) => {
+                bytes.extend([OpCode::PopNum as _, r, n]);
+            }
             Item::Instruction(Instruction::Add(r1, r2)) => bytes.extend([OpCode::Add as _, r1, r2]),
             Item::Instruction(Instruction::Sub(r1, r2)) => bytes.extend([OpCode::Sub as _, r1, r2]),
             Item::Instruction(Instruction::Mul(r1, r2)) => bytes.extend([OpCode::Mul as _, r1, r2]),
