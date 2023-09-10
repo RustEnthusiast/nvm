@@ -331,7 +331,7 @@ impl VM {
                     memory.write_bytes(self.sp(), &bytes[..n])?;
                     #[cfg(target_endian = "big")]
                     memory.write_bytes(self.sp(), &bytes[bytes.len() - n..])?;
-                    *self.sp_mut() = checked_add(self.sp(), 1)?;
+                    *self.sp_mut() = checked_add(self.sp(), n)?;
                 }
                 OpCode::Pop => *self.reg_mut(memory.read::<u8>(rp)? as _)? = self.pop(memory)?,
                 OpCode::PopNum => {
