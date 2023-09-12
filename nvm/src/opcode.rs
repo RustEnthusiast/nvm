@@ -164,11 +164,55 @@ pub enum OpCode {
     ///
     /// Arguments are passed on the stack.
     ///
-    /// Argument format: `[type, value]`
+    /// Argument format (reversed order on the stack): `[u8 type, value]`
     ///
     /// Types:
     ///
-    /// - 0 - `uint`
+    /// - 0 - `void`
+    ///
+    /// - 1 - `void *`
+    ///
+    /// - 2 - `uint`
+    ///
+    /// - 3 - `int`
+    ///
+    /// - 4 - `u8`
+    ///
+    /// - 5 - `i8`
+    ///
+    /// - 6 - `u16`
+    ///
+    /// - 7 - `i16`
+    ///
+    /// - 8 - `u32`
+    ///
+    /// - 9 - `i32`
+    ///
+    /// - 10 - `u64`
+    ///
+    /// - 11 - `i64`
+    ///
+    /// - 12 - `c_uchar`
+    ///
+    /// - 13 - `c_schar`
+    ///
+    /// - 14 - `c_ushort`
+    ///
+    /// - 15 - `c_short`
+    ///
+    /// - 16 - `c_uint`
+    ///
+    /// - 17 - `c_int`
+    ///
+    /// - 18 - `c_ulong`
+    ///
+    /// - 19 - `c_long`
+    ///
+    /// - 20 - `c_ulonglong`
+    ///
+    /// - 21 - `c_longlong`
+    ///
+    /// - 22 - A structure (format: `[usize num_fields, types]`)
     ///
     /// # Format arguments
     ///

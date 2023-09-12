@@ -46,9 +46,16 @@ use core::{ffi::FromBytesUntilNulError, num::TryFromIntError, str::Utf8Error};
 use num_traits::FromPrimitive;
 #[cfg(feature = "std")]
 use ::{
-    libffi::middle::{Cif, CodePtr, Type},
+    libffi::{
+        middle::Type,
+        raw::{ffi_abi_FFI_DEFAULT_ABI, ffi_status_FFI_OK},
+    },
     libloading::{Error as LibLoadingError, Library},
-    std::ffi::CStr,
+    std::{
+        ffi::{c_void, CStr},
+        mem::MaybeUninit,
+        ptr::addr_of_mut,
+    },
     thiserror::Error,
 };
 
@@ -99,7 +106,10 @@ pub enum NvmError {
         feature = "std",
         error("a syscall contains an invalid FFI type index parameter {0}")
     )]
-    FfiTypeError(usize),
+    FfiTypeError(u8),
+    /// A CIF was unable to be constructed.
+    #[cfg_attr(feature = "std", error("a CIF was unable to be constructed"))]
+    FfiCifError,
     /// The virtual machine ran into unexpected integer overflow.
     #[cfg_attr(
         feature = "std",
@@ -125,6 +135,9 @@ pub enum NvmError {
 pub trait MemoryDriver {
     /// Returns an immutable byte slice of the memory driver's buffer.
     fn buffer(&self) -> &[u8];
+
+    /// Returns a mutable byte slice of the memory driver's buffer.
+    fn buffer_mut(&mut self) -> &mut [u8];
 
     /// Reads a value at a specific location in the virtual memory.
     ///
@@ -241,7 +254,7 @@ impl VM {
 
     /// Pops a value off of the virtual stack.
     #[inline]
-    fn pop<T: Copy>(&mut self, memory: &mut impl MemoryDriver) -> Result<T, NvmError> {
+    fn pop<T: Copy>(&mut self, memory: &impl MemoryDriver) -> Result<T, NvmError> {
         *self.sp_mut() = checked_sub(self.sp(), core::mem::size_of::<T>())?;
         memory.read(self.sp())
     }
@@ -418,24 +431,93 @@ impl VM {
                 OpCode::Syscall => {
                     #[cfg(feature = "std")]
                     {
+                        fn next_type(
+                            vm: &mut VM,
+                            memory: &impl MemoryDriver,
+                        ) -> Result<Type, NvmError> {
+                            match vm.pop::<u8>(memory)? {
+                                0 => Ok(Type::void()),
+                                1 => Ok(Type::pointer()),
+                                2 => Ok(Type::usize()),
+                                3 => Ok(Type::isize()),
+                                4 => Ok(Type::u8()),
+                                5 => Ok(Type::i8()),
+                                6 => Ok(Type::u16()),
+                                7 => Ok(Type::i16()),
+                                8 => Ok(Type::u32()),
+                                9 => Ok(Type::i32()),
+                                10 => Ok(Type::u64()),
+                                11 => Ok(Type::i64()),
+                                12 => Ok(Type::c_uchar()),
+                                13 => Ok(Type::c_schar()),
+                                14 => Ok(Type::c_ushort()),
+                                15 => Ok(Type::c_short()),
+                                16 => Ok(Type::c_uint()),
+                                17 => Ok(Type::c_int()),
+                                18 => Ok(Type::c_ulong()),
+                                19 => Ok(Type::c_long()),
+                                20 => Ok(Type::c_ulonglong()),
+                                21 => Ok(Type::c_longlong()),
+                                22 => {
+                                    let num_fields = vm.pop::<usize>(memory)?;
+                                    let mut fields = Vec::with_capacity(num_fields);
+                                    for _ in 0..num_fields {
+                                        fields.push(next_type(vm, memory)?);
+                                    }
+                                    Ok(Type::structure(fields))
+                                }
+                                ty => Err(NvmError::FfiTypeError(ty)),
+                            }
+                        }
                         let left = self.reg(memory.read::<u8>(rp)? as _)?;
                         rp = checked_add(rp, 1)?;
                         let right = self.reg(memory.read::<u8>(rp)? as _)?;
-                        let mut types = Vec::new();
-                        let mut args = Vec::new();
+                        let mut types = Vec::with_capacity(right);
+                        let mut raw_types = Vec::with_capacity(right);
                         for _ in 0..right {
-                            match self.pop::<usize>(memory)? {
-                                0 => {
-                                    types.push(Type::usize());
-                                    let arg = self.pop::<usize>(memory)?;
-                                    args.push(libffi::middle::arg(&arg));
-                                }
-                                t => return Err(NvmError::FfiTypeError(t)),
-                            }
+                            let ty = next_type(&mut self, memory)?;
+                            raw_types.push(ty.as_raw_ptr());
+                            types.push(ty);
                         }
-                        let cif = Cif::new(types, Type::void());
-                        // SAFETY: The safety of this operation is documented by it's `Op`.
-                        unsafe { cif.call::<()>(CodePtr(left as _), &args) };
+                        let ret = next_type(&mut self, memory)?;
+                        let mut cif = MaybeUninit::uninit();
+                        unsafe {
+                            let err = libffi::raw::ffi_prep_cif(
+                                cif.as_mut_ptr(),
+                                ffi_abi_FFI_DEFAULT_ABI,
+                                right as _,
+                                ret.as_raw_ptr(),
+                                raw_types.as_mut_ptr(),
+                            );
+                            if err != ffi_status_FFI_OK {
+                                return Err(NvmError::FfiCifError);
+                            }
+                            let mut args = Vec::with_capacity(raw_types.len());
+                            for ty in &raw_types {
+                                *self.sp_mut() = checked_sub(self.sp(), (**ty).size)?;
+                                let Some(byte) = memory.buffer_mut().get_mut(self.sp()) else {
+                                    return Err(NvmError::MemoryReadError {
+                                        pos: self.sp(),
+                                        len: 0,
+                                    });
+                                };
+                                args.push(addr_of_mut!(*byte).cast::<c_void>());
+                            }
+                            *self.sp_mut() = checked_sub(self.sp(), (*ret.as_raw_ptr()).size)?;
+                            let Some(ret) = memory.buffer_mut().get_mut(self.sp()) else {
+                                return Err(NvmError::MemoryReadError {
+                                    pos: self.sp(),
+                                    len: 0,
+                                });
+                            };
+                            let ret = addr_of_mut!(*ret).cast::<c_void>();
+                            libffi::raw::ffi_call(
+                                cif.as_mut_ptr(),
+                                Some(std::mem::transmute(left)),
+                                ret,
+                                args.as_mut_ptr(),
+                            );
+                        }
                     }
                 }
                 OpCode::FreeLib => {

@@ -27,6 +27,12 @@ impl MemoryDriver for Memory {
         &self.buffer
     }
 
+    /// Returns a mutable byte slice of the memory driver's buffer.
+    #[inline]
+    fn buffer_mut(&mut self) -> &mut [u8] {
+        &mut self.buffer
+    }
+
     /// Reads a value at a specific location in the virtual memory.
     fn read<T: Copy>(&self, pos: usize) -> Result<T, NvmError> {
         if let Some(value) = self.buffer.get(pos) {
