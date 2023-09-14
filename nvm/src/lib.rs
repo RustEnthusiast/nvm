@@ -1,14 +1,31 @@
 //! A small virtual machine that can be used as a Rust library.
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 #![warn(
+    deprecated_in_future,
+    ffi_unwind_calls,
     future_incompatible,
+    invalid_reference_casting,
     let_underscore,
+    macro_use_extern_crate,
+    meta_variable_misuse,
+    missing_abi,
+    missing_docs,
+    non_ascii_idents,
     nonstandard_style,
+    noop_method_call,
     rust_2018_compatibility,
     rust_2018_idioms,
     rust_2021_compatibility,
+    single_use_lifetimes,
+    trivial_casts,
+    trivial_numeric_casts,
+    unreachable_pub,
     unused,
-    warnings,
+    unused_import_braces,
+    unused_lifetimes,
+    unused_qualifications,
+    unused_tuple_struct_fields,
+    variant_size_differences,
     clippy::all,
     clippy::cargo,
     clippy::complexity,
@@ -88,28 +105,23 @@ pub enum NvmError {
         feature = "std",
         error("a virtual memory driver failed to read {len} bytes from location {pos}")
     )]
-    MemoryReadError { pos: usize, len: usize },
+    MemoryReadError {
+        /// The memory position of the read.
+        pos: usize,
+        /// The attempted number of bytes to read.
+        len: usize,
+    },
     /// A memory driver failed to write to a specific memory location.
     #[cfg_attr(
         feature = "std",
         error("a virtual memory driver failed to write {len} bytes to location {pos}")
     )]
-    MemoryWriteError { pos: usize, len: usize },
-    /// A stack memory driver could not be acquired.
-    #[cfg_attr(feature = "std", error("a stack memory driver could not be acquired"))]
-    GetStackError,
-    /// A stack driver failed to read from a specific stack location.
-    #[cfg_attr(
-        feature = "std",
-        error("a virtual stack driver failed to read from location {pos}")
-    )]
-    StackReadError { pos: usize },
-    /// A stack driver failed to write to a specific stack location.
-    #[cfg_attr(
-        feature = "std",
-        error("a virtual stack driver failed to write to location {pos}")
-    )]
-    StackWriteError { pos: usize },
+    MemoryWriteError {
+        /// The memory position of the read.
+        pos: usize,
+        /// The attempted number of bytes to read.
+        len: usize,
+    },
     /// A syscall's FFI type parameter was invalid.
     #[cfg_attr(
         feature = "std",
