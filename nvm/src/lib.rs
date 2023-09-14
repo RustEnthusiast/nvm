@@ -25,12 +25,15 @@
     clippy::as_underscore,
     clippy::blanket_clippy_restriction_lints,
     clippy::cargo_common_metadata,
+    clippy::cognitive_complexity,
+    clippy::host_endian_bytes,
     clippy::implicit_return,
     clippy::exhaustive_enums,
     clippy::fn_to_numeric_cast_any,
     clippy::min_ident_chars,
     clippy::missing_inline_in_public_items,
     clippy::mod_module_files,
+    clippy::must_use_candidate,
     clippy::question_mark_used,
     clippy::semicolon_inside_block,
     clippy::semicolon_outside_block,
@@ -74,6 +77,12 @@ pub enum NvmError {
         error("an attempt was made to access an invalid register at index {0}")
     )]
     InvalidRegister(usize),
+    /// Reading from a register failed.
+    #[cfg_attr(feature = "std", error("reading from a register failed"))]
+    RegisterReadError,
+    /// Writing to a register failed.
+    #[cfg_attr(feature = "std", error("writing to a register failed"))]
+    RegisterWriteError,
     /// A memory driver failed to read from a specific memory location.
     #[cfg_attr(
         feature = "std",
@@ -302,18 +311,32 @@ impl VM {
                     rp = checked_add(rp, 1)?;
                     let n = memory.read::<u8>(rp)? as usize;
                     let pos = self.reg(right)?;
-                    let mem = &memory.buffer()[pos..pos + n];
+                    let Some(mem) = memory.buffer().get(pos..checked_add(pos, n)?) else {
+                        return Err(NvmError::MemoryReadError { pos, len: n });
+                    };
                     let bytes = bytemuck::bytes_of_mut(self.reg_mut(left)?);
                     #[cfg(target_endian = "little")]
                     {
-                        bytes[..n].copy_from_slice(mem);
-                        bytes[n..].fill(0);
+                        match bytes.get_mut(..n) {
+                            Some(bytes) => bytes.copy_from_slice(mem),
+                            _ => return Err(NvmError::RegisterWriteError),
+                        }
+                        match bytes.get_mut(n..) {
+                            Some(bytes) => bytes.fill(0),
+                            _ => return Err(NvmError::RegisterWriteError),
+                        }
                     }
                     #[cfg(target_endian = "big")]
                     {
                         let len = bytes.len();
-                        bytes[len - n..].copy_from_slice(mem);
-                        bytes[..len - n].fill(0);
+                        match bytes.get_mut(len - n..) {
+                            Some(bytes) => bytes.copy_from_slice(mem),
+                            _ => return Err(NvmError::RegisterWriteError),
+                        }
+                        match bytes.get_mut(..len - n) {
+                            Some(bytes) => bytes.fill(0),
+                            _ => return Err(NvmError::RegisterWriteError),
+                        }
                     }
                 }
                 OpCode::Store => {
@@ -330,9 +353,14 @@ impl VM {
                     let n = memory.read::<u8>(rp)? as usize;
                     let bytes = self.reg(right)?.to_ne_bytes();
                     #[cfg(target_endian = "little")]
-                    memory.write_bytes(self.reg(left)?, &bytes[..n])?;
+                    let Some(bytes) = bytes.get(..n) else {
+                        return Err(NvmError::RegisterReadError);
+                    };
                     #[cfg(target_endian = "big")]
-                    memory.write_bytes(self.reg(left)?, &bytes[bytes.len() - n..])?;
+                    let Some(bytes) = bytes.get(bytes.len() - n..) else {
+                        return Err(NvmError::RegisterReadError);
+                    };
+                    memory.write_bytes(self.reg(left)?, bytes)?;
                 }
                 OpCode::Push => self.push(memory, &self.reg(memory.read::<u8>(rp)? as _)?)?,
                 OpCode::PushNum => {
@@ -341,9 +369,14 @@ impl VM {
                     let n = memory.read::<u8>(rp)? as usize;
                     let bytes = self.reg(r)?.to_ne_bytes();
                     #[cfg(target_endian = "little")]
-                    memory.write_bytes(self.sp(), &bytes[..n])?;
+                    let Some(bytes) = bytes.get(..n) else {
+                        return Err(NvmError::RegisterReadError);
+                    };
                     #[cfg(target_endian = "big")]
-                    memory.write_bytes(self.sp(), &bytes[bytes.len() - n..])?;
+                    let Some(bytes) = bytes.get(bytes.len() - n..) else {
+                        return Err(NvmError::RegisterReadError);
+                    };
+                    memory.write_bytes(self.sp(), bytes)?;
                     *self.sp_mut() = checked_add(self.sp(), n)?;
                 }
                 OpCode::Pop => *self.reg_mut(memory.read::<u8>(rp)? as _)? = self.pop(memory)?,
@@ -352,19 +385,34 @@ impl VM {
                     rp = checked_add(rp, 1)?;
                     let n = memory.read::<u8>(rp)? as usize;
                     let pos = checked_sub(self.sp(), n)?;
-                    let mem = &memory.buffer()[pos..pos + n];
+                    let Some(mem) = memory.buffer().get(pos..self.sp()) else {
+                        return Err(NvmError::MemoryReadError { pos, len: n });
+                    };
                     let bytes = bytemuck::bytes_of_mut(self.reg_mut(left)?);
                     #[cfg(target_endian = "little")]
                     {
-                        bytes[..n].copy_from_slice(mem);
-                        bytes[n..].fill(0);
+                        match bytes.get_mut(..n) {
+                            Some(bytes) => bytes.copy_from_slice(mem),
+                            _ => return Err(NvmError::RegisterWriteError),
+                        }
+                        match bytes.get_mut(n..) {
+                            Some(bytes) => bytes.fill(0),
+                            _ => return Err(NvmError::RegisterWriteError),
+                        }
                     }
                     #[cfg(target_endian = "big")]
                     {
                         let len = bytes.len();
-                        bytes[len - n..].copy_from_slice(mem);
-                        bytes[..len - n].fill(0);
+                        match bytes.get_mut(len - n..) {
+                            Some(bytes) => bytes.copy_from_slice(mem),
+                            _ => return Err(NvmError::RegisterWriteError),
+                        }
+                        match bytes.get_mut(..len - n) {
+                            Some(bytes) => bytes.fill(0),
+                            _ => return Err(NvmError::RegisterWriteError),
+                        }
                     }
+                    *self.sp_mut() = checked_sub(self.sp(), n)?;
                 }
                 OpCode::Add => {
                     let left = memory.read::<u8>(rp)? as _;
@@ -431,6 +479,7 @@ impl VM {
                 OpCode::Syscall => {
                     #[cfg(feature = "std")]
                     {
+                        /// Gets the next FFI type from memory.
                         fn next_type(
                             vm: &mut VM,
                             memory: &impl MemoryDriver,
@@ -472,6 +521,7 @@ impl VM {
                         let left = self.reg(memory.read::<u8>(rp)? as _)?;
                         rp = checked_add(rp, 1)?;
                         let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                        #[allow(clippy::collection_is_never_read)]
                         let mut types = Vec::with_capacity(right);
                         let mut raw_types = Vec::with_capacity(right);
                         for _ in 0..right {
@@ -480,43 +530,48 @@ impl VM {
                             types.push(ty);
                         }
                         let ret = next_type(&mut self, memory)?;
+                        // SAFETY: `ret` is stored on the stack.
+                        let ret_size = unsafe { (*ret.as_raw_ptr()).size };
                         let mut cif = MaybeUninit::uninit();
+                        // SAFETY: The safety of this operation is documented by it's `Op`.
                         unsafe {
                             let err = libffi::raw::ffi_prep_cif(
                                 cif.as_mut_ptr(),
                                 ffi_abi_FFI_DEFAULT_ABI,
-                                right as _,
+                                right.try_into()?,
                                 ret.as_raw_ptr(),
                                 raw_types.as_mut_ptr(),
                             );
                             if err != ffi_status_FFI_OK {
                                 return Err(NvmError::FfiCifError);
                             }
-                            let mut args = Vec::with_capacity(raw_types.len());
-                            for ty in &raw_types {
-                                *self.sp_mut() = checked_sub(self.sp(), (**ty).size)?;
-                                let Some(byte) = memory.buffer_mut().get_mut(self.sp()) else {
-                                    return Err(NvmError::MemoryReadError {
-                                        pos: self.sp(),
-                                        len: 0,
-                                    });
-                                };
-                                args.push(addr_of_mut!(*byte).cast::<c_void>());
-                            }
-                            *self.sp_mut() = checked_sub(self.sp(), (*ret.as_raw_ptr()).size)?;
-                            let Some(ret) = memory.buffer_mut().get_mut(self.sp()) else {
+                        }
+                        let mut args = Vec::with_capacity(raw_types.len());
+                        for ty in &raw_types {
+                            // SAFETY: `ty` is pointing to a valid `ffi_type`.
+                            let arg_size = unsafe { (**ty).size };
+                            *self.sp_mut() = checked_sub(self.sp(), arg_size)?;
+                            let Some(byte) = memory.buffer_mut().get_mut(self.sp()) else {
                                 return Err(NvmError::MemoryReadError {
                                     pos: self.sp(),
-                                    len: 0,
+                                    len: arg_size,
                                 });
                             };
-                            let ret = addr_of_mut!(*ret).cast::<c_void>();
-                            libffi::raw::ffi_call(
-                                cif.as_mut_ptr(),
-                                Some(std::mem::transmute(left)),
-                                ret,
-                                args.as_mut_ptr(),
-                            );
+                            args.push(addr_of_mut!(*byte).cast::<c_void>());
+                        }
+                        *self.sp_mut() = checked_sub(self.sp(), ret_size)?;
+                        let Some(ret) = memory.buffer_mut().get_mut(self.sp()) else {
+                            return Err(NvmError::MemoryWriteError {
+                                pos: self.sp(),
+                                len: ret_size,
+                            });
+                        };
+                        let ret = addr_of_mut!(*ret).cast::<c_void>();
+                        // SAFETY: `usize` to function pointer transmute.
+                        let f = unsafe { Some(std::mem::transmute(left)) };
+                        // SAFETY: The safety of this operation is documented by it's `Op`.
+                        unsafe {
+                            libffi::raw::ffi_call(cif.as_mut_ptr(), f, ret, args.as_mut_ptr());
                         }
                     }
                 }
@@ -525,9 +580,7 @@ impl VM {
                     {
                         let r = self.reg(memory.read::<u8>(rp)? as _)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
-                        unsafe {
-                            drop(Box::from_raw(r as *mut Library));
-                        }
+                        unsafe { drop(Box::from_raw(r as *mut Library)) };
                     }
                 }
             }
