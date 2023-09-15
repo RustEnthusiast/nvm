@@ -3,7 +3,7 @@ use num_derive::FromPrimitive;
 
 /// Represents an NVM operation code.
 #[repr(u8)]
-#[derive(FromPrimitive)]
+#[derive(Clone, Copy, Debug, FromPrimitive)]
 pub enum OpCode {
     /// Exits the program with a given exit code.
     ///

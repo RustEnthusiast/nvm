@@ -9,6 +9,8 @@
     macro_use_extern_crate,
     meta_variable_misuse,
     missing_abi,
+    missing_copy_implementations,
+    missing_debug_implementations,
     missing_docs,
     non_ascii_idents,
     nonstandard_style,
@@ -20,10 +22,13 @@
     trivial_casts,
     trivial_numeric_casts,
     unreachable_pub,
+    unsafe_op_in_unsafe_fn,
     unused,
+    unused_crate_dependencies,
     unused_import_braces,
     unused_lifetimes,
     unused_qualifications,
+    unused_results,
     unused_tuple_struct_fields,
     variant_size_differences,
     clippy::all,
@@ -66,21 +71,22 @@ use core::{ffi::FromBytesUntilNulError, num::TryFromIntError, str::Utf8Error};
 use num_traits::FromPrimitive;
 #[cfg(feature = "std")]
 use ::{
+    core::{
+        ffi::{c_void, CStr},
+        mem::MaybeUninit,
+        ptr::addr_of_mut,
+    },
     libffi::{
         middle::Type,
         raw::{ffi_abi_FFI_DEFAULT_ABI, ffi_status_FFI_OK},
     },
     libloading::{Error as LibLoadingError, Library},
-    std::{
-        ffi::{c_void, CStr},
-        mem::MaybeUninit,
-        ptr::addr_of_mut,
-    },
     thiserror::Error,
 };
 
 /// Describes an error returned from the NVM virtual machine.
-#[cfg_attr(feature = "std", derive(Debug, Error))]
+#[derive(Debug)]
+#[cfg_attr(feature = "std", derive(Error))]
 pub enum NvmError {
     /// An invalid instruction/operation code was encountered.
     #[cfg_attr(
@@ -207,6 +213,7 @@ fn checked_div(x: usize, y: usize) -> Result<usize, NvmError> {
 }
 
 /// The NVM virtual machine.
+#[derive(Clone, Copy, Debug)]
 pub struct VM {
     /// The general purpose registers.
     reg: [usize; 6],
