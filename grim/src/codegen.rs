@@ -1,4 +1,4 @@
-use crate::parser::{Const, Instruction, Item, Static};
+use crate::parser::{Instruction, Item, RegConst, Static};
 use nvm::opcode::OpCode;
 use std::collections::HashMap;
 
@@ -7,10 +7,11 @@ use std::collections::HashMap;
 /// # Panics
 ///
 /// This operation panics if the identifier could not be found.
-fn get_const(n: &Const, locations: &HashMap<&str, usize>) -> usize {
+fn get_reg_const(n: &RegConst, locations: &HashMap<&str, usize>) -> usize {
     match n {
-        Const::Num(n) => *n,
-        Const::Ident(ident) => match locations.get(ident) {
+        RegConst::UInt(n) => *n,
+        RegConst::Int(n) => *n as _,
+        RegConst::Ident(ident) => match locations.get(ident) {
             Some(loc) => *loc,
             _ => panic!("failed to get the location of `{ident}`"),
         },
@@ -31,7 +32,7 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             Item::Instruction(Instruction::Nop) => bytes.push(OpCode::Nop as _),
             Item::Instruction(Instruction::Jump(n)) => {
                 bytes.push(OpCode::Jump as _);
-                let n = get_const(&n, locations);
+                let n = get_reg_const(&n, locations);
                 bytes.extend(bytemuck::bytes_of(&n));
             }
             Item::Instruction(Instruction::Move(r1, r2)) => {
@@ -39,7 +40,7 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             }
             Item::Instruction(Instruction::MoveConst(r, n)) => {
                 bytes.extend([OpCode::MoveConst as _, r]);
-                let n = get_const(&n, locations);
+                let n = get_reg_const(&n, locations);
                 bytes.extend(bytemuck::bytes_of(&n));
             }
             Item::Instruction(Instruction::Load(r1, r2)) => {

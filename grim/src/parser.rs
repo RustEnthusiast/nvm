@@ -3,11 +3,13 @@ use ariadne::Color;
 use nvm::opcode::OpCode;
 use std::{borrow::Cow, collections::HashMap, num::ParseIntError, slice::Iter, str::FromStr};
 
-/// Describes an NVM constant item.
+/// Describes an NVM register constant.
 #[derive(Clone, Copy)]
-pub(super) enum Const<'tok> {
-    /// A numeric constant.
-    Num(usize),
+pub(super) enum RegConst<'tok> {
+    /// An unsigned numeric constant.
+    UInt(usize),
+    /// A signed numeric constant.
+    Int(isize),
     /// An identifier for a module location.
     Ident(&'tok str),
 }
@@ -19,11 +21,11 @@ pub(super) enum Instruction<'tok> {
     /// The `nop` instruction.
     Nop,
     /// The `jump` instruction.
-    Jump(Const<'tok>),
+    Jump(RegConst<'tok>),
     /// The `move` instruction.
     Move(u8, u8),
     /// The `movec` instruction.
-    MoveConst(u8, Const<'tok>),
+    MoveConst(u8, RegConst<'tok>),
     /// The `load` instruction.
     Load(u8, u8),
     /// The `loadn` instruction.
@@ -181,39 +183,48 @@ fn next_num<F: FromStr>(
     }
 }
 
-/// Makes sure a token is a constant.
-fn assert_const<'tok>(
+/// Makes sure a token is a register constant.
+fn assert_reg_const<'tok>(
     filename: &Cow<str>,
     src: &str,
     token: &Token,
+    tokens: &mut Iter<Token>,
     const_token: &'tok Token,
-) -> Result<Const<'tok>, ParseIntError> {
+) -> Result<RegConst<'tok>, ParseIntError> {
     match const_token.ty() {
-        TokenType::Num => Ok(Const::Num(const_token.tok().parse()?)),
-        TokenType::Ident => Ok(Const::Ident(const_token.tok())),
-        _ => {
-            let tok_label = token.label(filename, "Instruction encountered here.", Color::Blue);
-            let const_label =
-                const_token.label(filename, "Invalid token encountered here.", Color::Red);
-            crate::grim_error(
-                (filename, src, token.loc().byte_pos()),
-                "Expected a numeric constant or an identifier as an instruction operand.",
-                [tok_label, const_label],
-                None,
-            );
+        TokenType::Punct if const_token.tok() == "-" => {
+            if let Some(num_token) = tokens.next() {
+                let sign_pos = const_token.loc().byte_pos();
+                let n_pos = num_token.loc().byte_pos();
+                if num_token.ty() == TokenType::Num && n_pos == sign_pos + 1 {
+                    let n_len = num_token.tok().len();
+                    return Ok(RegConst::Int(src[sign_pos..n_pos + n_len].parse()?));
+                }
+            }
         }
+        TokenType::Num => return Ok(RegConst::UInt(const_token.tok().parse()?)),
+        TokenType::Ident => return Ok(RegConst::Ident(const_token.tok())),
+        _ => {}
     }
+    let tok_label = token.label(filename, "Instruction encountered here.", Color::Blue);
+    let const_label = const_token.label(filename, "Invalid token encountered here.", Color::Red);
+    crate::grim_error(
+        (filename, src, token.loc().byte_pos()),
+        "Expected a numeric constant or an identifier as an instruction operand.",
+        [tok_label, const_label],
+        None,
+    );
 }
 
 /// Consumes a constant.
-fn next_const<'tok>(
+fn next_reg_const<'tok>(
     filename: &Cow<str>,
     src: &str,
     op_token: &Token,
     tokens: &mut Iter<'tok, Token>,
-) -> Result<Const<'tok>, ParseIntError> {
+) -> Result<RegConst<'tok>, ParseIntError> {
     match tokens.next() {
-        Some(const_token) => assert_const(filename, src, op_token, const_token),
+        Some(const_token) => assert_reg_const(filename, src, op_token, tokens, const_token),
         _ => crate::grim_error(
             (filename, src, op_token.loc().byte_pos()),
             "Expected a constant or an identifier as an instruction operand.",
@@ -264,7 +275,7 @@ fn next_instruction<'tok>(
         }
         "nop" => Ok(Ok(Instruction::Nop)),
         "jump" => {
-            let n = next_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens)?;
             Ok(Ok(Instruction::Jump(n)))
         }
         "move" => {
@@ -276,7 +287,7 @@ fn next_instruction<'tok>(
         "movec" => {
             let (r, reg_tok) = next_reg_ident(filename, src, token, tokens);
             next_op_separator(filename, src, reg_tok, tokens);
-            let const_tok = next_const(filename, src, token, tokens)?;
+            let const_tok = next_reg_const(filename, src, token, tokens)?;
             Ok(Ok(Instruction::MoveConst(r, const_tok)))
         }
         "load" => {
