@@ -6,9 +6,9 @@ use std::{borrow::Cow, collections::HashMap, num::ParseIntError, slice::Iter, st
 /// Describes an NVM register constant.
 #[derive(Clone, Copy)]
 pub(super) enum RegConst<'tok> {
-    /// An unsigned numeric constant.
+    /// An unsigned pointer-sized numeric constant.
     UInt(usize),
-    /// A signed numeric constant.
+    /// A signed pointer-sized numeric constant.
     Int(isize),
     /// An identifier for a module location.
     Ident(&'tok str),
@@ -90,8 +90,26 @@ impl Instruction<'_> {
 
 /// Describes a static item.
 pub(super) enum Static {
-    /// A numeric constant.
-    Num(usize),
+    /// An unsigned pointer-sized numeric constant.
+    UInt(usize),
+    /// A signed pointer-sized numeric constant.
+    Int(isize),
+    /// An unsigned 8-bit numeric constant.
+    U8(u8),
+    /// A signed 8-bit numeric constant.
+    I8(i8),
+    /// An unsigned 16-bit numeric constant.
+    U16(u16),
+    /// A signed 16-bit numeric constant.
+    I16(i16),
+    /// An unsigned 32-bit numeric constant.
+    U32(u32),
+    /// A signed 32-bit numeric constant.
+    I32(i32),
+    /// An unsigned 64-bit numeric constant.
+    U64(u64),
+    /// A signed 64-bit numeric constant.
+    I64(i64),
     /// A string literal.
     String(String),
 }
@@ -386,6 +404,12 @@ fn next_instruction<'tok>(
     }
 }
 
+/// Adds a static item.
+fn add_static<T>(items: &mut Vec<Item>, loc: &mut usize, s: Static) {
+    *loc += core::mem::size_of::<T>();
+    items.push(Item::Static(s));
+}
+
 /// Turns Grim source tokens into NVM items.
 pub(super) fn parse<'tok>(
     filename: &Cow<str>,
@@ -406,9 +430,130 @@ pub(super) fn parse<'tok>(
                     locations.insert(ident, loc);
                 }
             },
+            TokenType::Punct if token.tok() == "-" => {
+                if let Some(num_tok) = tokens.next() {
+                    let sign_pos = token.loc().byte_pos();
+                    let n_pos = num_tok.loc().byte_pos();
+                    if num_tok.ty() == TokenType::Num && n_pos == sign_pos + 1 {
+                        if let Some(ty_tok) = tokens.next() {
+                            let ty_pos = ty_tok.loc().byte_pos();
+                            if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + 1 {
+                                match ty_tok.tok() {
+                                    "int" => {
+                                        let n_len = num_tok.tok().len();
+                                        let s = Static::Int(src[sign_pos..n_pos + n_len].parse()?);
+                                        add_static::<isize>(&mut items, &mut loc, s);
+                                        continue;
+                                    }
+                                    "i8" => {
+                                        let n_len = num_tok.tok().len();
+                                        let s = Static::I8(src[sign_pos..n_pos + n_len].parse()?);
+                                        add_static::<i8>(&mut items, &mut loc, s);
+                                        continue;
+                                    }
+                                    "i16" => {
+                                        let n_len = num_tok.tok().len();
+                                        let s = Static::I16(src[sign_pos..n_pos + n_len].parse()?);
+                                        add_static::<i16>(&mut items, &mut loc, s);
+                                        continue;
+                                    }
+                                    "i32" => {
+                                        let n_len = num_tok.tok().len();
+                                        let s = Static::I32(src[sign_pos..n_pos + n_len].parse()?);
+                                        add_static::<i32>(&mut items, &mut loc, s);
+                                        continue;
+                                    }
+                                    "i64" => {
+                                        let n_len = num_tok.tok().len();
+                                        let s = Static::I64(src[sign_pos..n_pos + n_len].parse()?);
+                                        add_static::<i64>(&mut items, &mut loc, s);
+                                        continue;
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+                        crate::grim_error(
+                            (filename, src, num_tok.loc().byte_pos()),
+                            "Expected a signed type identifier after a numeric literal.",
+                            [num_tok.label(filename, "Numeric token encountered here.", Color::Red)],
+                            Some("Add a signed type identifier, such as 'int', directly after this number."),
+                        );
+                    }
+                }
+                crate::grim_error(
+                    (filename, src, token.loc().byte_pos()),
+                    "Expected a numeric literal after the negation operator.",
+                    [token.label(filename, "Negation operator encountered here.", Color::Red)],
+                    None,
+                );
+            }
             TokenType::Num => {
-                loc += core::mem::size_of::<usize>();
-                items.push(Item::Static(Static::Num(token.tok().parse()?)));
+                if let Some(ty_tok) = tokens.next() {
+                    let n_pos = token.loc().byte_pos();
+                    let ty_pos = ty_tok.loc().byte_pos();
+                    if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + 1 {
+                        match ty_tok.tok() {
+                            "uint" => {
+                                let s = Static::UInt(token.tok().parse()?);
+                                add_static::<usize>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "int" => {
+                                let s = Static::Int(token.tok().parse()?);
+                                add_static::<isize>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "u8" => {
+                                let s = Static::U8(token.tok().parse()?);
+                                add_static::<u8>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "i8" => {
+                                let s = Static::I8(token.tok().parse()?);
+                                add_static::<i8>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "u16" => {
+                                let s = Static::U16(token.tok().parse()?);
+                                add_static::<u16>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "i16" => {
+                                let s = Static::I16(token.tok().parse()?);
+                                add_static::<i16>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "u32" => {
+                                let s = Static::U32(token.tok().parse()?);
+                                add_static::<u32>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "i32" => {
+                                let s = Static::I32(token.tok().parse()?);
+                                add_static::<i32>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "u64" => {
+                                let s = Static::U64(token.tok().parse()?);
+                                add_static::<u64>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "i64" => {
+                                let s = Static::I64(token.tok().parse()?);
+                                add_static::<i64>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                crate::grim_error(
+                    (filename, src, token.loc().byte_pos()),
+                    "Expected a type identifier after a numeric literal.",
+                    [token.label(filename, "Numeric token encountered here.", Color::Red)],
+                    Some("Add a type identifier, such as 'uint', directly after this number."),
+                );
             }
             TokenType::String => {
                 let s = token.tok();
