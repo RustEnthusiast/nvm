@@ -437,10 +437,10 @@ pub(super) fn parse<'tok>(
                     if num_tok.ty() == TokenType::Num && n_pos == sign_pos + 1 {
                         if let Some(ty_tok) = tokens.next() {
                             let ty_pos = ty_tok.loc().byte_pos();
-                            if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + 1 {
+                            let n_len = num_tok.tok().len();
+                            if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + n_len {
                                 match ty_tok.tok() {
                                     "int" => {
-                                        let n_len = num_tok.tok().len();
                                         let s = Static::Int(src[sign_pos..n_pos + n_len].parse()?);
                                         add_static::<isize>(&mut items, &mut loc, s);
                                         continue;
@@ -492,7 +492,8 @@ pub(super) fn parse<'tok>(
                 if let Some(ty_tok) = tokens.next() {
                     let n_pos = token.loc().byte_pos();
                     let ty_pos = ty_tok.loc().byte_pos();
-                    if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + 1 {
+                    let n_len = token.tok().len();
+                    if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + n_len {
                         match ty_tok.tok() {
                             "uint" => {
                                 let s = Static::UInt(token.tok().parse()?);
