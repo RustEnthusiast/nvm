@@ -1,7 +1,7 @@
 use crate::lexer::{Token, TokenType};
 use ariadne::Color;
 use nvm::opcode::OpCode;
-use std::{borrow::Cow, collections::HashMap, num::ParseIntError, slice::Iter, str::FromStr};
+use std::{collections::HashMap, num::ParseIntError, slice::Iter, str::FromStr};
 
 /// Describes an NVM register constant.
 #[derive(Clone, Copy)]
@@ -123,7 +123,7 @@ pub(super) enum Item<'tok> {
 }
 
 /// Makes sure a token is a valid register identifier.
-fn assert_reg_ident(filename: &Cow<str>, src: &str, token: &Token, reg_tok: &Token) -> u8 {
+fn assert_reg_ident(filename: &str, src: &str, token: &Token, reg_tok: &Token) -> u8 {
     if reg_tok.ty() == TokenType::Ident {
         match reg_tok.tok() {
             "r0" => return 0,
@@ -147,7 +147,7 @@ fn assert_reg_ident(filename: &Cow<str>, src: &str, token: &Token, reg_tok: &Tok
 
 /// Consumes a register identifier.
 fn next_reg_ident<'tok, 'src>(
-    filename: &Cow<str>,
+    filename: &str,
     src: &str,
     token: &Token,
     tokens: &mut Iter<'tok, Token<'src>>,
@@ -165,7 +165,7 @@ fn next_reg_ident<'tok, 'src>(
 
 /// Makes sure a token is an numeric constant.
 fn assert_num<F: FromStr>(
-    filename: &Cow<str>,
+    filename: &str,
     src: &str,
     token: &Token,
     num_token: &Token,
@@ -185,7 +185,7 @@ fn assert_num<F: FromStr>(
 
 /// Consumes an numeric constant.
 fn next_num<F: FromStr>(
-    filename: &Cow<str>,
+    filename: &str,
     src: &str,
     token: &Token,
     tokens: &mut Iter<Token>,
@@ -203,7 +203,7 @@ fn next_num<F: FromStr>(
 
 /// Makes sure a token is a register constant.
 fn assert_reg_const<'tok>(
-    filename: &Cow<str>,
+    filename: &str,
     src: &str,
     token: &Token,
     tokens: &mut Iter<Token>,
@@ -236,7 +236,7 @@ fn assert_reg_const<'tok>(
 
 /// Consumes a constant.
 fn next_reg_const<'tok>(
-    filename: &Cow<str>,
+    filename: &str,
     src: &str,
     op_token: &Token,
     tokens: &mut Iter<'tok, Token>,
@@ -253,7 +253,7 @@ fn next_reg_const<'tok>(
 }
 
 /// Makes sure a token is an operand separator.
-fn assert_op_separator(filename: &Cow<str>, src: &str, op_token: &Token, sep_token: &Token) {
+fn assert_op_separator(filename: &str, src: &str, op_token: &Token, sep_token: &Token) {
     if sep_token.ty() != TokenType::Punct || sep_token.tok() != "," {
         let op_label = op_token.label(filename, "Operand encountered here.", Color::Blue);
         let sep_label = sep_token.label(filename, "Invalid token encountered here.", Color::Red);
@@ -267,7 +267,7 @@ fn assert_op_separator(filename: &Cow<str>, src: &str, op_token: &Token, sep_tok
 }
 
 /// Consumes an operand separator.
-fn next_op_separator(filename: &Cow<str>, src: &str, op_token: &Token, tokens: &mut Iter<Token>) {
+fn next_op_separator(filename: &str, src: &str, op_token: &Token, tokens: &mut Iter<Token>) {
     match tokens.next() {
         Some(sep_token) => assert_op_separator(filename, src, op_token, sep_token),
         _ => crate::grim_error(
@@ -281,7 +281,7 @@ fn next_op_separator(filename: &Cow<str>, src: &str, op_token: &Token, tokens: &
 
 /// Attempts to get the next instruction.
 fn next_instruction<'tok>(
-    filename: &Cow<str>,
+    filename: &str,
     src: &str,
     token: &'tok Token,
     tokens: &mut Iter<'tok, Token>,
@@ -412,7 +412,7 @@ fn add_static<T>(items: &mut Vec<Item>, loc: &mut usize, s: Static) {
 
 /// Turns Grim source tokens into NVM items.
 pub(super) fn parse<'tok>(
-    filename: &Cow<str>,
+    filename: &str,
     src: &str,
     mut tokens: Iter<'tok, Token>,
 ) -> Result<(Vec<Item<'tok>>, HashMap<&'tok str, usize>), ParseIntError> {
@@ -564,6 +564,9 @@ pub(super) fn parse<'tok>(
                     if c == '\\' {
                         match chars.next() {
                             Some('0') => s.push('\0'),
+                            Some('n') => s.push('\n'),
+                            Some('t') => s.push('\t'),
+                            Some('r') => s.push('\r'),
                             _ => {}
                         }
                     } else {

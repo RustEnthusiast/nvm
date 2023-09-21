@@ -1,5 +1,5 @@
 use ariadne::{Color, Label};
-use std::{borrow::Cow, iter::Peekable, ops::Range, str::Chars};
+use std::{iter::Peekable, ops::Range, str::Chars};
 
 /// Contains data about a token's source location.
 #[derive(Clone, Copy, Default)]
@@ -89,11 +89,11 @@ impl Token<'_> {
     /// Creates a [`Label`] for a token.
     #[inline]
     pub(super) fn label<'id>(
-        &'id self,
-        filename: &'id Cow<str>,
+        &self,
+        filename: &'id str,
         msg: &str,
         color: Color,
-    ) -> Label<(&'id Cow<str>, Range<usize>)> {
+    ) -> Label<(&'id str, Range<usize>)> {
         Label::new((
             filename,
             self.loc.byte_pos..self.loc.byte_pos + self.tok().len(),
@@ -140,7 +140,7 @@ fn skip_num(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) {
 
 /// Skips over a comment token.
 fn skip_comment(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) {
-    while let Some(chr) = chars.next() {
+    for chr in chars {
         if chr == '\n' {
             loc.next(chr);
             break;
@@ -155,7 +155,9 @@ fn skip_string(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) -> bool {
     while let Some(chr) = chars.next() {
         loc.next(chr);
         if chr == '\\' {
-            chars.next().map(|chr| loc.next(chr));
+            if let Some(chr) = chars.next() {
+                loc.next(chr);
+            }
         } else if chr == '\"' {
             return true;
         }
@@ -164,7 +166,7 @@ fn skip_string(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) -> bool {
 }
 
 /// Turns Grim source code into a series of low level tokens.
-pub(super) fn lex<'src>(filename: &Cow<str>, src: &'src str) -> Vec<Token<'src>> {
+pub(super) fn lex<'src>(filename: &str, src: &'src str) -> Vec<Token<'src>> {
     let mut chars = src.chars().peekable();
     let mut loc = SrcLoc::default();
     let mut tokens = Vec::new();

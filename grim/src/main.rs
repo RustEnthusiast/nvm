@@ -19,9 +19,11 @@ fn main() -> Result<(), ParseIntError> {
     let Ok(src) = std::fs::read_to_string(&cli.file) else {
         panic!("failed to read Grim source code from {:?}", cli.file);
     };
-    let tokens = lexer::lex(&cli.file.to_string_lossy(), &src);
-    let (items, locations) = parser::parse(&cli.file.to_string_lossy(), &src, tokens.iter())?;
-    let bytecode = codegen::gen_bytecode(items, &locations);
+    let filename = cli.file.to_string_lossy();
+    let bytecode = match filename {
+        Cow::Borrowed(filename) => assemble(filename, &src)?,
+        Cow::Owned(filename) => assemble(&filename, &src)?,
+    };
     let mut out_file = cli.file.clone();
     if !out_file.set_extension("nvm") {
         out_file = out_file.with_extension("nvm");
@@ -30,9 +32,16 @@ fn main() -> Result<(), ParseIntError> {
     Ok(())
 }
 
+/// Assembles Grim source code.
+fn assemble(filename: &str, src: &str) -> Result<Vec<u8>, ParseIntError> {
+    let tokens = lexer::lex(filename, src);
+    let (items, locations) = parser::parse(filename, src, tokens.iter())?;
+    Ok(codegen::gen_bytecode(items, &locations))
+}
+
 /// Reports an error and aborts.
-fn grim_error<'id, LabelIter: IntoIterator<Item = Label<(&'id Cow<'id, str>, Range<usize>)>>>(
-    file: (&Cow<str>, &str, usize),
+fn grim_error<'id, LabelIter: IntoIterator<Item = Label<(&'id str, Range<usize>)>>>(
+    file: (&str, &str, usize),
     msg: &str,
     labels: LabelIter,
     note: Option<&str>,
