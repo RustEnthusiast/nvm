@@ -1,0 +1,14 @@
+[package]
+name = "salvo"
+version = "0.0.0"
+edition = "2021"
+
+[dependencies]
+ariadne = "0.3"
+clap = { version = "4.4", features = ["derive"] }
+grim = { path = "../grim" }
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = [
+    "llvm16-0-prefer-dynamic",
+] }
+thiserror = "1.0"
+unicode-ident = "1.0"
