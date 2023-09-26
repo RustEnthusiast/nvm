@@ -1,4 +1,4 @@
-use crate::parser::Item;
+use crate::{parser::Item, OptLevel, OutputFileType};
 use core::num::ParseIntError;
 use inkwell::{
     builder::BuilderError,
@@ -35,6 +35,9 @@ pub(super) enum CodegenError {
 pub(super) fn gen<'src, I: IntoIterator<Item = Item<'src>>>(
     filename: &str,
     target: &str,
+    linker: &str,
+    out_file_type: OutputFileType,
+    opt_level: OptLevel,
     items: I,
 ) -> Result<(), CodegenError> {
     let path = Path::new(filename);
@@ -84,31 +87,46 @@ pub(super) fn gen<'src, I: IntoIterator<Item = Item<'src>>>(
 
         Target::initialize_all(&Default::default());
         let triple = TargetTriple::create(target);
+        let opt_level = match opt_level {
+            OptLevel::None => OptimizationLevel::None,
+            OptLevel::Less => OptimizationLevel::Less,
+            OptLevel::Default => OptimizationLevel::Default,
+            OptLevel::Aggressive => OptimizationLevel::Aggressive,
+        };
         let machine = Target::from_triple(&triple)
             .map_err(|_| CodegenError::TargetNonexistent(target.into()))?
             .create_target_machine(
                 &triple,
                 target_info.as_ref().map_or("", |i| i.0),
                 "",
-                OptimizationLevel::Aggressive,
+                opt_level,
                 RelocMode::Default,
                 CodeModel::Default,
             )
             .ok_or(CodegenError::TargetNonexistent(target.into()))?;
-        let module_path = path.with_extension("o");
+        let module_path = match out_file_type {
+            OutputFileType::Asm => path.with_extension("asm"),
+            _ => path.with_extension("o"),
+        };
         let exe_name = path.with_file_name(format!("{module_name}{EXE_SUFFIX}"));
 
+        let file_type = match out_file_type {
+            OutputFileType::Asm => FileType::Assembly,
+            _ => FileType::Object,
+        };
         machine
-            .write_to_file(&module, FileType::Object, &module_path)
+            .write_to_file(&module, file_type, &module_path)
             .map_err(|e| IOError::new(ErrorKind::Other, e.to_string()))?;
-        let mut cmd = Command::new("ld");
-        cmd.arg("-o");
-        cmd.args([&exe_name, &module_path]);
-        if let Some((_, rt)) = &target_info {
-            cmd.arg(rt);
+        if out_file_type == OutputFileType::Bin {
+            let mut cmd = Command::new(linker);
+            cmd.arg("-o");
+            cmd.args([&exe_name, &module_path]);
+            if let Some((_, rt)) = &target_info {
+                cmd.arg(rt);
+            }
+            cmd.status()?;
+            std::fs::remove_file(&module_path)?;
         }
-        cmd.status()?;
-        std::fs::remove_file(&module_path)?;
         if let Some((_, rt)) = &target_info {
             std::fs::remove_file(rt)?;
         }
