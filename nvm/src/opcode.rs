@@ -19,6 +19,14 @@ pub enum OpCode {
     ///
     /// - `uint i` - The memory location to jump to.
     Jump,
+    /// Pushes the instruction pointer onto the stack and jumps to a location in memory.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    Call,
+    /// Jumps to a location stored on the stack.
+    Return,
     /// Copies the value of one register to another.
     ///
     /// # Format arguments
@@ -236,7 +244,7 @@ impl OpCode {
     #[allow(clippy::arithmetic_side_effects)]
     pub const fn size(&self) -> usize {
         match *self {
-            Self::Nop => 1,
+            Self::Nop | Self::Return => 1,
             Self::Exit | Self::Push | Self::Pop | Self::LoadLib | Self::FreeLib => 2,
             Self::Move
             | Self::Load
@@ -250,7 +258,7 @@ impl OpCode {
             | Self::LoadSym
             | Self::Syscall => 3,
             Self::LoadNum | Self::StoreNum => 4,
-            Self::Jump => 1 + core::mem::size_of::<usize>(),
+            Self::Jump | Self::Call => 1 + core::mem::size_of::<usize>(),
             Self::MoveConst => 2 + core::mem::size_of::<usize>(),
         }
     }

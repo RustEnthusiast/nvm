@@ -22,6 +22,10 @@ pub(super) enum Instruction<'tok> {
     Nop,
     /// The `jump` instruction.
     Jump(RegConst<'tok>),
+    /// The `call` instruction.
+    Call(RegConst<'tok>),
+    /// The `return` instruction.
+    Return,
     /// The `move` instruction.
     Move(u8, u8),
     /// The `movec` instruction.
@@ -66,6 +70,8 @@ impl Instruction<'_> {
             Instruction::Exit(_) => OpCode::Exit.size(),
             Instruction::Nop => OpCode::Nop.size(),
             Instruction::Jump(_) => OpCode::Jump.size(),
+            Instruction::Call(_) => OpCode::Call.size(),
+            Instruction::Return => OpCode::Return.size(),
             Instruction::Move(_, _) => OpCode::Move.size(),
             Instruction::MoveConst(_, _) => OpCode::MoveConst.size(),
             Instruction::Load(_, _) => OpCode::Load.size(),
@@ -296,6 +302,11 @@ fn next_instruction<'tok>(
             let n = next_reg_const(filename, src, token, tokens)?;
             Ok(Ok(Instruction::Jump(n)))
         }
+        "call" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::Call(n)))
+        }
+        "return" => Ok(Ok(Instruction::Return)),
         "move" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
             next_op_separator(filename, src, reg_tok, tokens);

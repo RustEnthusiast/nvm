@@ -44,6 +44,12 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
                 let n = get_reg_const(&n, locations);
                 bytes.extend(bytemuck::bytes_of(&n));
             }
+            Item::Instruction(Instruction::Call(n)) => {
+                bytes.push(OpCode::Call as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::Return) => bytes.push(OpCode::Return as _),
             Item::Instruction(Instruction::Move(r1, r2)) => {
                 bytes.extend([OpCode::Move as _, r1, r2]);
             }

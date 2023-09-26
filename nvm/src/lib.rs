@@ -306,6 +306,11 @@ impl VM {
                 OpCode::Exit => return self.reg(memory.read::<u8>(rp)? as _),
                 OpCode::Nop => {}
                 OpCode::Jump => *self.ip_mut() = memory.read(rp)?,
+                OpCode::Call => {
+                    self.push(memory, &self.ip())?;
+                    *self.ip_mut() = memory.read(rp)?;
+                }
+                OpCode::Return => *self.ip_mut() = self.pop(memory)?,
                 OpCode::Move => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
