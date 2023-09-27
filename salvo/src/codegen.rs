@@ -50,7 +50,7 @@ pub(super) fn gen<'src, I: IntoIterator<Item = Item<'src>>>(
         let mut asm = String::from(include_str!("../rt/nvm.asm"));
         for item in items {
             match item {
-                Item::Fn(f) => asm.push_str(&format!("{}\n", f.name())),
+                Item::Fn(f) => asm.push_str(&format!("{} return\n", f.name())),
             }
         }
         let nvm = grim::assemble(filename, &asm)?;
