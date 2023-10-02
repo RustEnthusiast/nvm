@@ -48,10 +48,12 @@
     clippy::blanket_clippy_restriction_lints,
     clippy::cargo_common_metadata,
     clippy::cognitive_complexity,
+    clippy::default_numeric_fallback,
     clippy::host_endian_bytes,
     clippy::implicit_return,
     clippy::exhaustive_enums,
     clippy::fn_to_numeric_cast_any,
+    clippy::match_bool,
     clippy::min_ident_chars,
     clippy::missing_inline_in_public_items,
     clippy::mod_module_files,
@@ -188,6 +190,18 @@ pub trait MemoryDriver {
     fn write_bytes(&mut self, pos: usize, buffer: &[u8]) -> Result<(), NvmError>;
 }
 
+/// Describes the flags register.
+enum Flags {
+    /// Indicates a zero result.
+    Zero = 1,
+    /// Indicates an unsigned overflow.
+    Carry = 1 << 1,
+    /// Indicates a signed overflow.
+    Overflow = 1 << 2,
+    /// Indicates a signed result.
+    Sign = 1 << 3,
+}
+
 /// Computes a checked addition operation on a [usize].
 #[inline]
 fn checked_add(x: usize, y: usize) -> Result<usize, NvmError> {
@@ -216,7 +230,7 @@ fn checked_div(x: usize, y: usize) -> Result<usize, NvmError> {
 #[derive(Clone, Copy, Debug)]
 pub struct VM {
     /// The general purpose registers.
-    reg: [usize; 6],
+    reg: [usize; 7],
 }
 impl VM {
     /// A constant for indexing the virtual machine's instruction pointer register.
@@ -225,11 +239,14 @@ impl VM {
     /// A constant for indexing the virtual machine's stack pointer register.
     pub const SP: usize = 5;
 
+    /// A constant for indexing the virtual machine's flags register.
+    pub const FLAGS: usize = 6;
+
     /// Creates a new NVM virtual machine.
     #[inline]
     #[must_use]
     pub const fn new() -> Self {
-        Self { reg: [0; 6] }
+        Self { reg: [0; 7] }
     }
 
     /// Returns a copy of a register.
@@ -266,6 +283,18 @@ impl VM {
     #[inline]
     fn sp_mut(&mut self) -> &mut usize {
         &mut self.reg[Self::SP]
+    }
+
+    /// Returns a copy of the flags register.
+    #[inline]
+    const fn flags(&self) -> usize {
+        self.reg[Self::FLAGS]
+    }
+
+    /// Returns a mutable reference to the flags register.
+    #[inline]
+    fn flags_mut(&mut self) -> &mut usize {
+        &mut self.reg[Self::FLAGS]
     }
 
     /// Pushes a value onto the virtual stack.
@@ -305,12 +334,6 @@ impl VM {
             match opcode {
                 OpCode::Exit => return self.reg(memory.read::<u8>(rp)? as _),
                 OpCode::Nop => {}
-                OpCode::Jump => *self.ip_mut() = memory.read(rp)?,
-                OpCode::Call => {
-                    self.push(memory, &self.ip())?;
-                    *self.ip_mut() = memory.read(rp)?;
-                }
-                OpCode::Return => *self.ip_mut() = self.pop(memory)?,
                 OpCode::Move => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
@@ -465,6 +488,125 @@ impl VM {
                     let right = self.reg(memory.read::<u8>(rp)? as _)?;
                     let left = self.reg_mut(left)?;
                     *left = checked_div(*left, right)?;
+                }
+                OpCode::Call => {
+                    self.push(memory, &self.ip())?;
+                    *self.ip_mut() = memory.read(rp)?;
+                }
+                OpCode::Return => *self.ip_mut() = self.pop(memory)?,
+                OpCode::Cmp => {
+                    let left = self.reg(memory.read::<u8>(rp)? as _)?;
+                    rp = checked_add(rp, 1)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let (sub, c) = left.overflowing_sub(right);
+                    if sub == 0 {
+                        *self.flags_mut() = self.flags()
+                            | Flags::Zero as usize
+                                & !(Flags::Carry as usize)
+                                & !(Flags::Sign as usize)
+                                & !(Flags::Overflow as usize);
+                    } else {
+                        *self.flags_mut() &= !(Flags::Zero as usize);
+                        match c {
+                            true => *self.flags_mut() |= Flags::Carry as usize,
+                            false => *self.flags_mut() &= !(Flags::Carry as usize),
+                        }
+                        #[allow(clippy::cast_possible_wrap)]
+                        let (sub, o) = (left as isize).overflowing_sub(right as isize);
+                        match o {
+                            true => *self.flags_mut() |= Flags::Overflow as usize,
+                            false => *self.flags_mut() &= !(Flags::Overflow as usize),
+                        }
+                        match sub < 0 {
+                            true => *self.flags_mut() |= Flags::Sign as usize,
+                            false => *self.flags_mut() &= !(Flags::Sign as usize),
+                        }
+                    }
+                }
+                OpCode::Jump => *self.ip_mut() = memory.read(rp)?,
+                OpCode::JZ | OpCode::JE => {
+                    if (self.flags() & (Flags::Zero as usize)) != 0 {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JNZ | OpCode::JNE => {
+                    if (self.flags() & (Flags::Zero as usize)) == 0 {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JC | OpCode::JB => {
+                    if (self.flags() & (Flags::Carry as usize)) != 0 {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JNC | OpCode::JAE => {
+                    if (self.flags() & (Flags::Carry as usize)) == 0 {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JO => {
+                    if (self.flags() & (Flags::Overflow as usize)) != 0 {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JNO => {
+                    if (self.flags() & (Flags::Overflow as usize)) == 0 {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JS => {
+                    if (self.flags() & (Flags::Sign as usize)) != 0 {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JNS => {
+                    if (self.flags() & (Flags::Sign as usize)) == 0 {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JA => {
+                    if (self.flags() & (Flags::Zero as usize)) == 0
+                        && (self.flags() & (Flags::Carry as usize)) == 0
+                    {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JBE => {
+                    if (self.flags() & (Flags::Zero as usize)) != 0
+                        || (self.flags() & (Flags::Carry as usize)) != 0
+                    {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JG => {
+                    if (self.flags() & (Flags::Zero as usize)) == 0
+                        && (((self.flags() & (Flags::Sign as usize)) == 0)
+                            == ((self.flags() & (Flags::Overflow as usize)) == 0))
+                    {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JGE => {
+                    if ((self.flags() & (Flags::Sign as usize)) == 0)
+                        == ((self.flags() & (Flags::Overflow as usize)) == 0)
+                    {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JL => {
+                    if ((self.flags() & (Flags::Sign as usize)) == 0)
+                        != ((self.flags() & (Flags::Overflow as usize)) == 0)
+                    {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
+                }
+                OpCode::JLE => {
+                    if (self.flags() & (Flags::Zero as usize)) != 0
+                        || (((self.flags() & (Flags::Sign as usize)) == 0)
+                            != ((self.flags() & (Flags::Overflow as usize)) == 0))
+                    {
+                        *self.ip_mut() = memory.read(rp)?;
+                    }
                 }
                 OpCode::LoadLib => {
                     #[cfg(feature = "std")]

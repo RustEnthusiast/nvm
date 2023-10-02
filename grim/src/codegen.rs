@@ -39,17 +39,6 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             Item::Static(Static::String(s)) => bytes.extend(s.as_bytes()),
             Item::Instruction(Instruction::Exit(r)) => bytes.extend([OpCode::Exit as _, r]),
             Item::Instruction(Instruction::Nop) => bytes.push(OpCode::Nop as _),
-            Item::Instruction(Instruction::Jump(n)) => {
-                bytes.push(OpCode::Jump as _);
-                let n = get_reg_const(&n, locations);
-                bytes.extend(bytemuck::bytes_of(&n));
-            }
-            Item::Instruction(Instruction::Call(n)) => {
-                bytes.push(OpCode::Call as _);
-                let n = get_reg_const(&n, locations);
-                bytes.extend(bytemuck::bytes_of(&n));
-            }
-            Item::Instruction(Instruction::Return) => bytes.push(OpCode::Return as _),
             Item::Instruction(Instruction::Move(r1, r2)) => {
                 bytes.extend([OpCode::Move as _, r1, r2]);
             }
@@ -82,6 +71,108 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             Item::Instruction(Instruction::Sub(r1, r2)) => bytes.extend([OpCode::Sub as _, r1, r2]),
             Item::Instruction(Instruction::Mul(r1, r2)) => bytes.extend([OpCode::Mul as _, r1, r2]),
             Item::Instruction(Instruction::Div(r1, r2)) => bytes.extend([OpCode::Div as _, r1, r2]),
+            Item::Instruction(Instruction::Call(n)) => {
+                bytes.push(OpCode::Call as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::Return) => bytes.push(OpCode::Return as _),
+            Item::Instruction(Instruction::Cmp(r1, r2)) => bytes.extend([OpCode::Cmp as _, r1, r2]),
+            Item::Instruction(Instruction::Jump(n)) => {
+                bytes.push(OpCode::Jump as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JZ(n)) => {
+                bytes.push(OpCode::JZ as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JNZ(n)) => {
+                bytes.push(OpCode::JNZ as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JO(n)) => {
+                bytes.push(OpCode::JO as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JNO(n)) => {
+                bytes.push(OpCode::JNO as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JC(n)) => {
+                bytes.push(OpCode::JC as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JNC(n)) => {
+                bytes.push(OpCode::JNC as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JS(n)) => {
+                bytes.push(OpCode::JS as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JNS(n)) => {
+                bytes.push(OpCode::JNS as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JE(n)) => {
+                bytes.push(OpCode::JE as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JNE(n)) => {
+                bytes.push(OpCode::JNE as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JA(n)) => {
+                bytes.push(OpCode::JA as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JAE(n)) => {
+                bytes.push(OpCode::JAE as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JB(n)) => {
+                bytes.push(OpCode::JB as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JBE(n)) => {
+                bytes.push(OpCode::JBE as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JG(n)) => {
+                bytes.push(OpCode::JG as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JGE(n)) => {
+                bytes.push(OpCode::JGE as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JL(n)) => {
+                bytes.push(OpCode::JL as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
+            Item::Instruction(Instruction::JLE(n)) => {
+                bytes.push(OpCode::JLE as _);
+                let n = get_reg_const(&n, locations);
+                bytes.extend(bytemuck::bytes_of(&n));
+            }
             Item::Instruction(Instruction::LoadLib(r)) => bytes.extend([OpCode::LoadLib as _, r]),
             Item::Instruction(Instruction::LoadSym(r1, r2)) => {
                 bytes.extend([OpCode::LoadSym as _, r1, r2]);

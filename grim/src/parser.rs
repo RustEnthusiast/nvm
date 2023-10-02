@@ -20,12 +20,6 @@ pub(super) enum Instruction<'tok> {
     Exit(u8),
     /// The `nop` instruction.
     Nop,
-    /// The `jump` instruction.
-    Jump(RegConst<'tok>),
-    /// The `call` instruction.
-    Call(RegConst<'tok>),
-    /// The `return` instruction.
-    Return,
     /// The `move` instruction.
     Move(u8, u8),
     /// The `movec` instruction.
@@ -54,6 +48,50 @@ pub(super) enum Instruction<'tok> {
     Mul(u8, u8),
     /// The `div` instruction.
     Div(u8, u8),
+    /// The `call` instruction.
+    Call(RegConst<'tok>),
+    /// The `return` instruction.
+    Return,
+    /// The `cmp` instruction.
+    Cmp(u8, u8),
+    /// The `jump` instruction.
+    Jump(RegConst<'tok>),
+    /// The `jz` instruction.
+    JZ(RegConst<'tok>),
+    /// The `jnz` instruction.
+    JNZ(RegConst<'tok>),
+    /// The `jo` instruction.
+    JO(RegConst<'tok>),
+    /// The `jno` instruction.
+    JNO(RegConst<'tok>),
+    /// The `jc` instruction.
+    JC(RegConst<'tok>),
+    /// The `jnc` instruction.
+    JNC(RegConst<'tok>),
+    /// The `js` instruction.
+    JS(RegConst<'tok>),
+    /// The `jns` instruction.
+    JNS(RegConst<'tok>),
+    /// The `je` instruction.
+    JE(RegConst<'tok>),
+    /// The `jne` instruction.
+    JNE(RegConst<'tok>),
+    /// The `ja` instruction.
+    JA(RegConst<'tok>),
+    /// The `jae` instruction.
+    JAE(RegConst<'tok>),
+    /// The `jb` instruction.
+    JB(RegConst<'tok>),
+    /// The `jbe` instruction.
+    JBE(RegConst<'tok>),
+    /// The `jg` instruction.
+    JG(RegConst<'tok>),
+    /// The `jge` instruction.
+    JGE(RegConst<'tok>),
+    /// The `jl` instruction.
+    JL(RegConst<'tok>),
+    /// The `jle` instruction.
+    JLE(RegConst<'tok>),
     /// The `loadlib` instruction.
     LoadLib(u8),
     /// The `loadsym` instruction.
@@ -69,9 +107,6 @@ impl Instruction<'_> {
         match self {
             Instruction::Exit(_) => OpCode::Exit.size(),
             Instruction::Nop => OpCode::Nop.size(),
-            Instruction::Jump(_) => OpCode::Jump.size(),
-            Instruction::Call(_) => OpCode::Call.size(),
-            Instruction::Return => OpCode::Return.size(),
             Instruction::Move(_, _) => OpCode::Move.size(),
             Instruction::MoveConst(_, _) => OpCode::MoveConst.size(),
             Instruction::Load(_, _) => OpCode::Load.size(),
@@ -86,6 +121,28 @@ impl Instruction<'_> {
             Instruction::Sub(_, _) => OpCode::Sub.size(),
             Instruction::Mul(_, _) => OpCode::Mul.size(),
             Instruction::Div(_, _) => OpCode::Div.size(),
+            Instruction::Call(_) => OpCode::Call.size(),
+            Instruction::Return => OpCode::Return.size(),
+            Instruction::Cmp(_, _) => OpCode::Cmp.size(),
+            Instruction::Jump(_) => OpCode::Jump.size(),
+            Instruction::JZ(_) => OpCode::JZ.size(),
+            Instruction::JNZ(_) => OpCode::JNZ.size(),
+            Instruction::JO(_) => OpCode::JO.size(),
+            Instruction::JNO(_) => OpCode::JNO.size(),
+            Instruction::JC(_) => OpCode::JC.size(),
+            Instruction::JNC(_) => OpCode::JNC.size(),
+            Instruction::JS(_) => OpCode::JS.size(),
+            Instruction::JNS(_) => OpCode::JNS.size(),
+            Instruction::JE(_) => OpCode::JE.size(),
+            Instruction::JNE(_) => OpCode::JNE.size(),
+            Instruction::JA(_) => OpCode::JA.size(),
+            Instruction::JAE(_) => OpCode::JAE.size(),
+            Instruction::JB(_) => OpCode::JB.size(),
+            Instruction::JBE(_) => OpCode::JBE.size(),
+            Instruction::JG(_) => OpCode::JG.size(),
+            Instruction::JGE(_) => OpCode::JGE.size(),
+            Instruction::JL(_) => OpCode::JL.size(),
+            Instruction::JLE(_) => OpCode::JLE.size(),
             Instruction::LoadLib(_) => OpCode::LoadLib.size(),
             Instruction::LoadSym(_, _) => OpCode::LoadSym.size(),
             Instruction::Syscall(_, _) => OpCode::Syscall.size(),
@@ -298,15 +355,6 @@ fn next_instruction<'tok>(
             Ok(Ok(Instruction::Exit(r)))
         }
         "nop" => Ok(Ok(Instruction::Nop)),
-        "jump" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
-            Ok(Ok(Instruction::Jump(n)))
-        }
-        "call" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
-            Ok(Ok(Instruction::Call(n)))
-        }
-        "return" => Ok(Ok(Instruction::Return)),
         "move" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
             next_op_separator(filename, src, reg_tok, tokens);
@@ -390,6 +438,93 @@ fn next_instruction<'tok>(
             next_op_separator(filename, src, reg_tok, tokens);
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Div(r1, r2)))
+        }
+        "call" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::Call(n)))
+        }
+        "return" => Ok(Ok(Instruction::Return)),
+        "cmp" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Cmp(r1, r2)))
+        }
+        "jump" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::Jump(n)))
+        }
+        "jz" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JZ(n)))
+        }
+        "jnz" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JNZ(n)))
+        }
+        "jo" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JO(n)))
+        }
+        "jno" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JNO(n)))
+        }
+        "jc" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JC(n)))
+        }
+        "jnc" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JNC(n)))
+        }
+        "js" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JS(n)))
+        }
+        "jns" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JNS(n)))
+        }
+        "je" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JE(n)))
+        }
+        "jne" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JNE(n)))
+        }
+        "ja" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JA(n)))
+        }
+        "jae" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JAE(n)))
+        }
+        "jb" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JB(n)))
+        }
+        "jbe" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JBE(n)))
+        }
+        "jg" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JG(n)))
+        }
+        "jge" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JGE(n)))
+        }
+        "jl" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JL(n)))
+        }
+        "jle" => {
+            let n = next_reg_const(filename, src, token, tokens)?;
+            Ok(Ok(Instruction::JLE(n)))
         }
         "loadlib" => {
             let (r, _) = next_reg_ident(filename, src, token, tokens);

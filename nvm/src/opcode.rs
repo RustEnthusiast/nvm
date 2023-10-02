@@ -13,20 +13,6 @@ pub enum OpCode {
     Exit,
     /// No operation, does nothing.
     Nop,
-    /// Jumps to a location in memory.
-    ///
-    /// # Format arguments
-    ///
-    /// - `uint i` - The memory location to jump to.
-    Jump,
-    /// Pushes the instruction pointer onto the stack and jumps to a location in memory.
-    ///
-    /// # Format arguments
-    ///
-    /// - `uint i` - The memory location to jump to.
-    Call,
-    /// Jumps to a location stored on the stack.
-    Return,
     /// Copies the value of one register to another.
     ///
     /// # Format arguments
@@ -135,6 +121,144 @@ pub enum OpCode {
     ///
     /// - `u8 i2` - The index of the source register.
     Div,
+    /// Pushes the instruction pointer onto the stack and jumps to a location in memory.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    Call,
+    /// Jumps to a location stored on the stack.
+    Return,
+    /// Compares two register operands, updating the flags register accordingly.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the first operand.
+    ///
+    /// - `u8 i2` - The index of the second operand.
+    Cmp,
+    /// Jumps to a location in memory.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    Jump,
+    /// Jumps to a location in memory if the zero flag is set.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JZ,
+    /// Jumps to a location in memory if the zero flag is not set.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JNZ,
+    /// Jumps to a location in memory if the overflow flag is set.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JO,
+    /// Jumps to a location in memory if the overflow flag is not set.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JNO,
+    /// Jumps to a location in memory if the carry flag is set.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JC,
+    /// Jumps to a location in memory if the carry flag is not set.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JNC,
+    /// Jumps to a location in memory if the sign flag is set.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JS,
+    /// Jumps to a location in memory if the sign flag is not set.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JNS,
+    /// Jumps to a location in memory if the last comparison resulted in equality.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JE,
+    /// Jumps to a location in memory if the last comparison resulted in inequality.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JNE,
+    /// Jumps to a location in memory if the last comparison resulted in a greater unsigned left
+    /// operand.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JA,
+    /// Jumps to a location in memory if the last comparison resulted in a greater or equal
+    /// unsigned left operand.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JAE,
+    /// Jumps to a location in memory if the last comparison resulted in a lesser unsigned left
+    /// operand.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JB,
+    /// Jumps to a location in memory if the last comparison resulted in a lesser or equal
+    /// unsigned left operand.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JBE,
+    /// Jumps to a location in memory if the last comparison resulted in a greater signed left
+    /// operand.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JG,
+    /// Jumps to a location in memory if the last comparison resulted in a greater or equal signed
+    /// left operand.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JGE,
+    /// Jumps to a location in memory if the last comparison resulted in a lesser signed left
+    /// operand.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JL,
+    /// Jumps to a location in memory if the last comparison resulted in a lesser or equal signed
+    /// left operand.
+    ///
+    /// # Format arguments
+    ///
+    /// - `uint i` - The memory location to jump to.
+    JLE,
     /// Loads a native dynamic library.
     ///
     /// The library handle is stored in the register at index `i`.
@@ -255,10 +379,30 @@ impl OpCode {
             | Self::Sub
             | Self::Mul
             | Self::Div
+            | Self::Cmp
             | Self::LoadSym
             | Self::Syscall => 3,
             Self::LoadNum | Self::StoreNum => 4,
-            Self::Jump | Self::Call => 1 + core::mem::size_of::<usize>(),
+            Self::Call
+            | Self::Jump
+            | Self::JZ
+            | Self::JNZ
+            | Self::JO
+            | Self::JNO
+            | Self::JC
+            | Self::JNC
+            | Self::JS
+            | Self::JNS
+            | Self::JE
+            | Self::JNE
+            | Self::JA
+            | Self::JAE
+            | Self::JB
+            | Self::JBE
+            | Self::JG
+            | Self::JGE
+            | Self::JL
+            | Self::JLE => 1 + core::mem::size_of::<usize>(),
             Self::MoveConst => 2 + core::mem::size_of::<usize>(),
         }
     }
