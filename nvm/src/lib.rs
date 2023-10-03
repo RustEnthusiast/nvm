@@ -79,6 +79,11 @@ use ::{
         raw::{ffi_abi_FFI_DEFAULT_ABI, ffi_status_FFI_OK},
     },
     libloading::{Error as LibLoadingError, Library},
+    std::{
+        borrow::Cow,
+        env::consts::{DLL_EXTENSION, DLL_PREFIX},
+        path::PathBuf,
+    },
     thiserror::Error,
 };
 
@@ -614,8 +619,21 @@ impl VM {
                             .get(pos..)
                             .ok_or(NvmError::MemoryReadError { pos, len: 0 })?;
                         let name = CStr::from_bytes_until_nul(name)?;
+                        let mut name = PathBuf::from(name.to_str()?).with_extension(DLL_EXTENSION);
+                        if let Some(file_name) = name.file_name() {
+                            let has_prefix = match file_name.to_string_lossy() {
+                                Cow::Borrowed(f) => f.starts_with(DLL_PREFIX),
+                                Cow::Owned(f) => f.starts_with(DLL_PREFIX),
+                            };
+                            if !has_prefix {
+                                name = name.with_file_name(format!(
+                                    "{DLL_PREFIX}{}",
+                                    file_name.to_string_lossy()
+                                ));
+                            }
+                        }
                         // SAFETY: The safety of this operation is documented by it's `Op`.
-                        let lib = unsafe { Box::into_raw(Box::new(Library::new(name.to_str()?)?)) };
+                        let lib = unsafe { Box::into_raw(Box::new(Library::new(name)?)) };
                         *self.reg_mut(r)? = lib as _;
                     }
                 }
