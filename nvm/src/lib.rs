@@ -73,11 +73,7 @@ use core::{ffi::FromBytesUntilNulError, num::TryFromIntError, str::Utf8Error};
 use num_traits::FromPrimitive;
 #[cfg(feature = "std")]
 use ::{
-    core::{
-        ffi::{c_void, CStr},
-        mem::MaybeUninit,
-        ptr::addr_of_mut,
-    },
+    core::{ffi::CStr, mem::MaybeUninit, ptr::addr_of_mut},
     libffi::{
         middle::Type,
         raw::{ffi_abi_FFI_DEFAULT_ABI, ffi_status_FFI_OK},
@@ -723,16 +719,16 @@ impl VM {
                                     len: arg_size,
                                 });
                             };
-                            args.push(addr_of_mut!(*byte).cast::<c_void>());
+                            args.push(addr_of_mut!(*byte).cast());
                         }
-                        *self.sp_mut() = checked_sub(self.sp(), ret_size)?;
-                        let Some(ret) = memory.buffer_mut().get_mut(self.sp()) else {
+                        let ret_addr = checked_sub(self.sp(), ret_size)?;
+                        let Some(ret) = memory.buffer_mut().get_mut(ret_addr) else {
                             return Err(NvmError::MemoryWriteError {
-                                pos: self.sp(),
+                                pos: ret_addr,
                                 len: ret_size,
                             });
                         };
-                        let ret = addr_of_mut!(*ret).cast::<c_void>();
+                        let ret = addr_of_mut!(*ret).cast();
                         // SAFETY: `usize` to function pointer transmute.
                         let f = unsafe { Some(std::mem::transmute(left)) };
                         // SAFETY: The safety of this operation is documented by it's `Op`.
