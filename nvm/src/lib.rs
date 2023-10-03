@@ -203,6 +203,12 @@ enum Flags {
     Sign = 1 << 3,
 }
 
+/// Computes a checked negation operation on an [isize].
+#[inline]
+fn checked_neg(x: isize) -> Result<isize, NvmError> {
+    x.checked_neg().ok_or(NvmError::OverflowError)
+}
+
 /// Computes a checked addition operation on a [usize].
 #[inline]
 fn checked_add(x: usize, y: usize) -> Result<usize, NvmError> {
@@ -462,6 +468,10 @@ impl VM {
                     }
                     *self.sp_mut() = checked_sub(self.sp(), n)?;
                 }
+                OpCode::Neg => {
+                    let r = memory.read::<u8>(rp)? as _;
+                    *self.reg_mut(r)? = checked_neg(self.reg(r)? as _)? as _;
+                }
                 OpCode::Add => {
                     let left = memory.read::<u8>(rp)? as _;
                     rp = checked_add(rp, 1)?;
@@ -489,6 +499,45 @@ impl VM {
                     let right = self.reg(memory.read::<u8>(rp)? as _)?;
                     let left = self.reg_mut(left)?;
                     *left = checked_div(*left, right)?;
+                }
+                OpCode::Not => {
+                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
+                    *r = !*r;
+                }
+                OpCode::And => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
+                    *left &= right;
+                }
+                OpCode::Or => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
+                    *left |= right;
+                }
+                OpCode::Xor => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
+                    *left ^= right;
+                }
+                OpCode::Shl => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
+                    *left <<= right;
+                }
+                OpCode::Shr => {
+                    let left = memory.read::<u8>(rp)? as _;
+                    rp = checked_add(rp, 1)?;
+                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    let left = self.reg_mut(left)?;
+                    *left >>= right;
                 }
                 OpCode::Call => {
                     self.push(memory, &self.ip())?;

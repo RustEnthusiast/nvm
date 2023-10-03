@@ -40,6 +40,8 @@ pub(super) enum Instruction<'tok> {
     Pop(u8),
     /// The `popn` instruction.
     PopNum(u8, u8),
+    /// The `neg` instruction.
+    Neg(u8),
     /// The `add` instruction.
     Add(u8, u8),
     /// The `sub` instruction.
@@ -48,6 +50,18 @@ pub(super) enum Instruction<'tok> {
     Mul(u8, u8),
     /// The `div` instruction.
     Div(u8, u8),
+    /// The `not` instruction.
+    Not(u8),
+    /// The `and` instruction.
+    And(u8, u8),
+    /// The `or` instruction.
+    Or(u8, u8),
+    /// The `xor` instruction.
+    Xor(u8, u8),
+    /// The `shl` instruction.
+    Shl(u8, u8),
+    /// The `shr` instruction.
+    Shr(u8, u8),
     /// The `call` instruction.
     Call(RegConst<'tok>),
     /// The `return` instruction.
@@ -117,10 +131,17 @@ impl Instruction<'_> {
             Instruction::PushNum(_, _) => OpCode::PushNum.size(),
             Instruction::Pop(_) => OpCode::Pop.size(),
             Instruction::PopNum(_, _) => OpCode::PopNum.size(),
+            Instruction::Neg(_) => OpCode::Neg.size(),
             Instruction::Add(_, _) => OpCode::Add.size(),
             Instruction::Sub(_, _) => OpCode::Sub.size(),
             Instruction::Mul(_, _) => OpCode::Mul.size(),
             Instruction::Div(_, _) => OpCode::Div.size(),
+            Instruction::Not(_) => OpCode::Not.size(),
+            Instruction::And(_, _) => OpCode::And.size(),
+            Instruction::Or(_, _) => OpCode::Or.size(),
+            Instruction::Xor(_, _) => OpCode::Xor.size(),
+            Instruction::Shl(_, _) => OpCode::Shl.size(),
+            Instruction::Shr(_, _) => OpCode::Shr.size(),
             Instruction::Call(_) => OpCode::Call.size(),
             Instruction::Return => OpCode::Return.size(),
             Instruction::Cmp(_, _) => OpCode::Cmp.size(),
@@ -415,6 +436,10 @@ fn next_instruction<'tok>(
             let n = next_num(filename, src, token, tokens)?;
             Ok(Ok(Instruction::PopNum(r, n)))
         }
+        "neg" => {
+            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Neg(r)))
+        }
         "add" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
             next_op_separator(filename, src, reg_tok, tokens);
@@ -438,6 +463,40 @@ fn next_instruction<'tok>(
             next_op_separator(filename, src, reg_tok, tokens);
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Div(r1, r2)))
+        }
+        "not" => {
+            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Not(r)))
+        }
+        "and" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::And(r1, r2)))
+        }
+        "or" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Or(r1, r2)))
+        }
+        "xor" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Xor(r1, r2)))
+        }
+        "shl" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Shl(r1, r2)))
+        }
+        "shr" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::Shr(r1, r2)))
         }
         "call" => {
             let n = next_reg_const(filename, src, token, tokens)?;

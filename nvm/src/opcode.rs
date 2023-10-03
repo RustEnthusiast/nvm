@@ -85,6 +85,12 @@ pub enum OpCode {
     ///
     /// - `u8 n` - The number of bytes to pop.
     PopNum,
+    /// Negates the `uint` value in the register at index `i`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i` - The index of the register to negate.
+    Neg,
     /// Adds the `uint` value in the register at index `i2` to the `uint` value in the register at
     /// index `i1`.
     ///
@@ -121,6 +127,55 @@ pub enum OpCode {
     ///
     /// - `u8 i2` - The index of the source register.
     Div,
+    /// Performs a bitwise not operation on the `uint` value in the register at index `i`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i` - The index of the register.
+    Not,
+    /// Performs a bitwise and operation on the `uint` values in the registers at index `i1` and
+    /// `i2`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the destination register.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    And,
+    /// Performs a bitwise or operation on the `uint` values in the registers at index `i1` and
+    /// `i2`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the destination register.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    Or,
+    /// Performs a bitwise xor operation on the `uint` values in the registers at index `i1` and
+    /// `i2`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the destination register.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    Xor,
+    /// Performs a left bit shift on the `uint` value in the register at index `i1`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the register containing the value to shift.
+    ///
+    /// - `u8 i2` - The index of the register containing the number of bits to shift.
+    Shl,
+    /// Performs a right bit shift on the `uint` value in the register at index `i1`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the register containing the value to shift.
+    ///
+    /// - `u8 i2` - The index of the register containing the number of bits to shift.
+    Shr,
     /// Pushes the instruction pointer onto the stack and jumps to a location in memory.
     ///
     /// # Format arguments
@@ -369,7 +424,13 @@ impl OpCode {
     pub const fn size(&self) -> usize {
         match *self {
             Self::Nop | Self::Return => 1,
-            Self::Exit | Self::Push | Self::Pop | Self::LoadLib | Self::FreeLib => 2,
+            Self::Exit
+            | Self::Push
+            | Self::Pop
+            | Self::Neg
+            | Self::Not
+            | Self::LoadLib
+            | Self::FreeLib => 2,
             Self::Move
             | Self::Load
             | Self::Store
@@ -379,6 +440,11 @@ impl OpCode {
             | Self::Sub
             | Self::Mul
             | Self::Div
+            | Self::And
+            | Self::Or
+            | Self::Xor
+            | Self::Shl
+            | Self::Shr
             | Self::Cmp
             | Self::LoadSym
             | Self::Syscall => 3,
