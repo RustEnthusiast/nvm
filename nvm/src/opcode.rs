@@ -186,6 +186,10 @@ pub enum OpCode {
     Return,
     /// Compares two register operands, updating the flags register accordingly.
     ///
+    /// # Flags modified
+    ///
+    /// `zf`, `cf`, `of`, `sf`.
+    ///
     /// # Format arguments
     ///
     /// - `u8 i1` - The index of the first operand.

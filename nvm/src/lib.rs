@@ -685,8 +685,11 @@ impl VM {
                             }
                         }
                         // SAFETY: The safety of this operation is documented by it's `Op`.
-                        let lib = unsafe { Box::into_raw(Box::new(Library::new(path)?)) };
-                        *self.reg_mut(r)? = lib as _;
+                        let lib = unsafe { Library::new(path) };
+                        *self.reg_mut(r)? = match lib {
+                            Ok(lib) => Box::into_raw(Box::new(lib)) as _,
+                            _ => 0,
+                        };
                     }
                 }
                 OpCode::LoadSym => {
@@ -704,8 +707,11 @@ impl VM {
                             .ok_or(NvmError::MemoryReadError { pos, len: 0 })?;
                         let name = CStr::from_bytes_until_nul(name)?;
                         // SAFETY: We're using an opaque function pointer.
-                        let sym = unsafe { lib.get::<fn()>(name.to_bytes())? };
-                        *self.reg_mut(left)? = *sym as _;
+                        let sym = unsafe { lib.get::<fn()>(name.to_bytes()) };
+                        *self.reg_mut(left)? = match sym {
+                            Ok(sym) => *sym as _,
+                            _ => 0,
+                        };
                     }
                 }
                 OpCode::Syscall => {
