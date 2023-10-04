@@ -548,25 +548,22 @@ impl VM {
                     ip = checked_add(ip, 1)?;
                     let left = self.reg(memory.read::<u8>(ip)? as _)?;
                     let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
-                    let (sub, c) = left.overflowing_sub(right);
+                    let (_, c) = left.overflowing_sub(right);
+                    match c {
+                        true => *self.flags_mut() |= Flags::Carry as usize,
+                        false => *self.flags_mut() &= !(Flags::Carry as usize),
+                    }
+                    #[allow(clippy::cast_possible_wrap)]
+                    let (sub, o) = (left as isize).overflowing_sub(right as isize);
+                    match o {
+                        true => *self.flags_mut() |= Flags::Overflow as usize,
+                        false => *self.flags_mut() &= !(Flags::Overflow as usize),
+                    }
                     if sub == 0 {
-                        *self.flags_mut() = self.flags()
-                            | Flags::Zero as usize
-                                & !(Flags::Carry as usize)
-                                & !(Flags::Sign as usize)
-                                & !(Flags::Overflow as usize);
+                        *self.flags_mut() =
+                            self.flags() | Flags::Zero as usize & !(Flags::Sign as usize);
                     } else {
                         *self.flags_mut() &= !(Flags::Zero as usize);
-                        match c {
-                            true => *self.flags_mut() |= Flags::Carry as usize,
-                            false => *self.flags_mut() &= !(Flags::Carry as usize),
-                        }
-                        #[allow(clippy::cast_possible_wrap)]
-                        let (sub, o) = (left as isize).overflowing_sub(right as isize);
-                        match o {
-                            true => *self.flags_mut() |= Flags::Overflow as usize,
-                            false => *self.flags_mut() &= !(Flags::Overflow as usize),
-                        }
                         match sub < 0 {
                             true => *self.flags_mut() |= Flags::Sign as usize,
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
