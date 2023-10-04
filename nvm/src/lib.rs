@@ -81,7 +81,7 @@ use ::{
     libloading::{Error as LibLoadingError, Library},
     std::{
         borrow::Cow,
-        env::consts::{DLL_EXTENSION, DLL_PREFIX},
+        env::consts::{DLL_EXTENSION, DLL_PREFIX, DLL_SUFFIX},
         path::PathBuf,
     },
     thiserror::Error,
@@ -333,37 +333,36 @@ impl VM {
         memory.write_bytes(0, code)?;
         *self.sp_mut() = code.len();
         loop {
-            let ip = self.ip();
+            let mut ip = self.ip();
             let op = memory.read::<u8>(ip)?;
             let opcode = OpCode::from_u8(op).ok_or(NvmError::InvalidOperation(op))?;
-            let mut rp = checked_add(ip, 1)?;
             *self.ip_mut() = checked_add(ip, opcode.size())?;
             match opcode {
-                OpCode::Exit => return self.reg(memory.read::<u8>(rp)? as _),
+                OpCode::Exit => return self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _),
                 OpCode::Nop => {}
                 OpCode::Move => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = memory.read::<u8>(rp)? as _;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = memory.read::<u8>(checked_add(ip, 1)?)? as _;
                     *self.reg_mut(left)? = self.reg(right)?;
                 }
                 OpCode::MoveConst => {
-                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
-                    rp = checked_add(rp, 1)?;
-                    *r = memory.read::<usize>(rp)?;
+                    ip = checked_add(ip, 1)?;
+                    let r = self.reg_mut(memory.read::<u8>(ip)? as _)?;
+                    *r = memory.read::<usize>(checked_add(ip, 1)?)?;
                 }
                 OpCode::Load => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = memory.read::<u8>(rp)? as _;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = memory.read::<u8>(checked_add(ip, 1)?)? as _;
                     *self.reg_mut(left)? = memory.read(self.reg(right)?)?;
                 }
                 OpCode::LoadNum => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let n = memory.read::<u8>(rp)? as usize;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    ip = checked_add(ip, 1)?;
+                    let right = memory.read::<u8>(ip)? as _;
+                    let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let pos = self.reg(right)?;
                     let Some(mem) = memory.buffer().get(pos..checked_add(pos, n)?) else {
                         return Err(NvmError::MemoryReadError { pos, len: n });
@@ -394,17 +393,17 @@ impl VM {
                     }
                 }
                 OpCode::Store => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = memory.read::<u8>(rp)? as _;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = memory.read::<u8>(checked_add(ip, 1)?)? as _;
                     memory.write(self.reg(left)?, &self.reg(right)?)?;
                 }
                 OpCode::StoreNum => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let n = memory.read::<u8>(rp)? as usize;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    ip = checked_add(ip, 1)?;
+                    let right = memory.read::<u8>(ip)? as _;
+                    let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let bytes = self.reg(right)?.to_ne_bytes();
                     #[cfg(target_endian = "little")]
                     let Some(bytes) = bytes.get(..n) else {
@@ -416,11 +415,14 @@ impl VM {
                     };
                     memory.write_bytes(self.reg(left)?, bytes)?;
                 }
-                OpCode::Push => self.push(memory, &self.reg(memory.read::<u8>(rp)? as _)?)?,
+                OpCode::Push => {
+                    let r = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    self.push(memory, &self.reg(r)?)?;
+                }
                 OpCode::PushNum => {
-                    let r = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let n = memory.read::<u8>(rp)? as usize;
+                    ip = checked_add(ip, 1)?;
+                    let r = memory.read::<u8>(ip)? as _;
+                    let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let bytes = self.reg(r)?.to_ne_bytes();
                     #[cfg(target_endian = "little")]
                     let Some(bytes) = bytes.get(..n) else {
@@ -433,11 +435,14 @@ impl VM {
                     memory.write_bytes(self.sp(), bytes)?;
                     *self.sp_mut() = checked_add(self.sp(), n)?;
                 }
-                OpCode::Pop => *self.reg_mut(memory.read::<u8>(rp)? as _)? = self.pop(memory)?,
+                OpCode::Pop => {
+                    let r = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    *self.reg_mut(r)? = self.pop(memory)?;
+                }
                 OpCode::PopNum => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let n = memory.read::<u8>(rp)? as usize;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let pos = checked_sub(self.sp(), n)?;
                     let Some(mem) = memory.buffer().get(pos..self.sp()) else {
                         return Err(NvmError::MemoryReadError { pos, len: n });
@@ -469,85 +474,80 @@ impl VM {
                     *self.sp_mut() = checked_sub(self.sp(), n)?;
                 }
                 OpCode::Neg => {
-                    let r = memory.read::<u8>(rp)? as _;
-                    *self.reg_mut(r)? = checked_neg(self.reg(r)? as _)? as _;
+                    let r = self.reg_mut(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    *r = checked_neg(*r as _)? as _;
                 }
                 OpCode::Add => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                     let left = self.reg_mut(left)?;
                     *left = checked_add(*left, right)?;
                 }
                 OpCode::Sub => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                     let left = self.reg_mut(left)?;
                     *left = checked_sub(*left, right)?;
                 }
                 OpCode::Mul => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                     let left = self.reg_mut(left)?;
                     *left = checked_mul(*left, right)?;
                 }
                 OpCode::Div => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                     let left = self.reg_mut(left)?;
                     *left = checked_div(*left, right)?;
                 }
                 OpCode::Not => {
-                    let r = self.reg_mut(memory.read::<u8>(rp)? as _)?;
+                    let r = self.reg_mut(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                     *r = !*r;
                 }
                 OpCode::And => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left &= right;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    *self.reg_mut(left)? &= right;
                 }
                 OpCode::Or => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left |= right;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    *self.reg_mut(left)? |= right;
                 }
                 OpCode::Xor => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left ^= right;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    *self.reg_mut(left)? ^= right;
                 }
                 OpCode::Shl => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left <<= right;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    *self.reg_mut(left)? <<= right;
                 }
                 OpCode::Shr => {
-                    let left = memory.read::<u8>(rp)? as _;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left >>= right;
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    *self.reg_mut(left)? >>= right;
                 }
                 OpCode::Call => {
                     self.push(memory, &self.ip())?;
-                    *self.ip_mut() = memory.read(rp)?;
+                    *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                 }
                 OpCode::Return => *self.ip_mut() = self.pop(memory)?,
                 OpCode::Cmp => {
-                    let left = self.reg(memory.read::<u8>(rp)? as _)?;
-                    rp = checked_add(rp, 1)?;
-                    let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                    ip = checked_add(ip, 1)?;
+                    let left = self.reg(memory.read::<u8>(ip)? as _)?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                     let (sub, c) = left.overflowing_sub(right);
                     if sub == 0 {
                         *self.flags_mut() = self.flags()
@@ -573,59 +573,59 @@ impl VM {
                         }
                     }
                 }
-                OpCode::Jump => *self.ip_mut() = memory.read(rp)?,
+                OpCode::Jump => *self.ip_mut() = memory.read(checked_add(ip, 1)?)?,
                 OpCode::JZ | OpCode::JE => {
                     if (self.flags() & (Flags::Zero as usize)) != 0 {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JNZ | OpCode::JNE => {
                     if (self.flags() & (Flags::Zero as usize)) == 0 {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JC | OpCode::JB => {
                     if (self.flags() & (Flags::Carry as usize)) != 0 {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JNC | OpCode::JAE => {
                     if (self.flags() & (Flags::Carry as usize)) == 0 {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JO => {
                     if (self.flags() & (Flags::Overflow as usize)) != 0 {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JNO => {
                     if (self.flags() & (Flags::Overflow as usize)) == 0 {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JS => {
                     if (self.flags() & (Flags::Sign as usize)) != 0 {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JNS => {
                     if (self.flags() & (Flags::Sign as usize)) == 0 {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JA => {
                     if (self.flags() & (Flags::Zero as usize)) == 0
                         && (self.flags() & (Flags::Carry as usize)) == 0
                     {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JBE => {
                     if (self.flags() & (Flags::Zero as usize)) != 0
                         || (self.flags() & (Flags::Carry as usize)) != 0
                     {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JG => {
@@ -633,21 +633,21 @@ impl VM {
                         && (((self.flags() & (Flags::Sign as usize)) == 0)
                             == ((self.flags() & (Flags::Overflow as usize)) == 0))
                     {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JGE => {
                     if ((self.flags() & (Flags::Sign as usize)) == 0)
                         == ((self.flags() & (Flags::Overflow as usize)) == 0)
                     {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JL => {
                     if ((self.flags() & (Flags::Sign as usize)) == 0)
                         != ((self.flags() & (Flags::Overflow as usize)) == 0)
                     {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::JLE => {
@@ -655,43 +655,46 @@ impl VM {
                         || (((self.flags() & (Flags::Sign as usize)) == 0)
                             != ((self.flags() & (Flags::Overflow as usize)) == 0))
                     {
-                        *self.ip_mut() = memory.read(rp)?;
+                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
                     }
                 }
                 OpCode::LoadLib => {
                     #[cfg(feature = "std")]
                     {
-                        let r = memory.read::<u8>(rp)? as _;
+                        let r = memory.read::<u8>(checked_add(ip, 1)?)? as _;
                         let pos = self.reg(r)?;
                         let name = memory
                             .buffer()
                             .get(pos..)
                             .ok_or(NvmError::MemoryReadError { pos, len: 0 })?;
-                        let name = CStr::from_bytes_until_nul(name)?;
-                        let mut name = PathBuf::from(name.to_str()?).with_extension(DLL_EXTENSION);
-                        if let Some(file_name) = name.file_name() {
+                        let name = CStr::from_bytes_until_nul(name)?.to_str()?;
+                        let mut path = PathBuf::from(name);
+                        if !name.contains(DLL_SUFFIX) {
+                            path = path.with_extension(DLL_EXTENSION);
+                        }
+                        if let Some(file_name) = path.file_name() {
                             let has_prefix = match file_name.to_string_lossy() {
                                 Cow::Borrowed(f) => f.starts_with(DLL_PREFIX),
                                 Cow::Owned(f) => f.starts_with(DLL_PREFIX),
                             };
                             if !has_prefix {
-                                name = name.with_file_name(format!(
+                                path = path.with_file_name(format!(
                                     "{DLL_PREFIX}{}",
                                     file_name.to_string_lossy()
                                 ));
                             }
                         }
                         // SAFETY: The safety of this operation is documented by it's `Op`.
-                        let lib = unsafe { Box::into_raw(Box::new(Library::new(name)?)) };
+                        let lib = unsafe { Box::into_raw(Box::new(Library::new(path)?)) };
                         *self.reg_mut(r)? = lib as _;
                     }
                 }
                 OpCode::LoadSym => {
                     #[cfg(feature = "std")]
                     {
-                        let left = memory.read::<u8>(rp)? as _;
-                        rp = checked_add(rp, 1)?;
-                        let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                        ip = checked_add(ip, 1)?;
+                        let left = memory.read::<u8>(ip)? as _;
+                        let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         let lib = unsafe { &*(right as *const Library) };
                         let pos = self.reg(left)?;
@@ -747,9 +750,9 @@ impl VM {
                                 ty => Err(NvmError::FfiTypeError(ty)),
                             }
                         }
-                        let left = self.reg(memory.read::<u8>(rp)? as _)?;
-                        rp = checked_add(rp, 1)?;
-                        let right = self.reg(memory.read::<u8>(rp)? as _)?;
+                        ip = checked_add(ip, 1)?;
+                        let left = self.reg(memory.read::<u8>(ip)? as _)?;
+                        let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                         #[allow(clippy::collection_is_never_read)]
                         let mut types = Vec::with_capacity(right);
                         let mut raw_types = Vec::with_capacity(right);
@@ -807,7 +810,7 @@ impl VM {
                 OpCode::FreeLib => {
                     #[cfg(feature = "std")]
                     {
-                        let r = self.reg(memory.read::<u8>(rp)? as _)?;
+                        let r = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         unsafe { drop(Box::from_raw(r as *mut Library)) };
                     }
