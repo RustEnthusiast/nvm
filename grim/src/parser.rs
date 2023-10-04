@@ -44,12 +44,20 @@ pub(super) enum Instruction<'tok> {
     Neg(u8),
     /// The `add` instruction.
     Add(u8, u8),
+    /// The `addi` instruction.
+    AddI(u8, u8),
     /// The `sub` instruction.
     Sub(u8, u8),
+    /// The `subi` instruction.
+    SubI(u8, u8),
     /// The `mul` instruction.
     Mul(u8, u8),
+    /// The `muli` instruction.
+    MulI(u8, u8),
     /// The `div` instruction.
     Div(u8, u8),
+    /// The `divi` instruction.
+    DivI(u8, u8),
     /// The `not` instruction.
     Not(u8),
     /// The `and` instruction.
@@ -133,9 +141,13 @@ impl Instruction<'_> {
             Instruction::PopNum(_, _) => OpCode::PopNum.size(),
             Instruction::Neg(_) => OpCode::Neg.size(),
             Instruction::Add(_, _) => OpCode::Add.size(),
+            Instruction::AddI(_, _) => OpCode::AddI.size(),
             Instruction::Sub(_, _) => OpCode::Sub.size(),
+            Instruction::SubI(_, _) => OpCode::SubI.size(),
             Instruction::Mul(_, _) => OpCode::Mul.size(),
+            Instruction::MulI(_, _) => OpCode::MulI.size(),
             Instruction::Div(_, _) => OpCode::Div.size(),
+            Instruction::DivI(_, _) => OpCode::DivI.size(),
             Instruction::Not(_) => OpCode::Not.size(),
             Instruction::And(_, _) => OpCode::And.size(),
             Instruction::Or(_, _) => OpCode::Or.size(),
@@ -446,11 +458,23 @@ fn next_instruction<'tok>(
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Add(r1, r2)))
         }
+        "addi" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::AddI(r1, r2)))
+        }
         "sub" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
             next_op_separator(filename, src, reg_tok, tokens);
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Sub(r1, r2)))
+        }
+        "subi" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::SubI(r1, r2)))
         }
         "mul" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
@@ -458,11 +482,23 @@ fn next_instruction<'tok>(
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Mul(r1, r2)))
         }
+        "muli" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::MulI(r1, r2)))
+        }
         "div" => {
             let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
             next_op_separator(filename, src, reg_tok, tokens);
             let (r2, _) = next_reg_ident(filename, src, token, tokens);
             Ok(Ok(Instruction::Div(r1, r2)))
+        }
+        "divi" => {
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            next_op_separator(filename, src, reg_tok, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            Ok(Ok(Instruction::DivI(r1, r2)))
         }
         "not" => {
             let (r, _) = next_reg_ident(filename, src, token, tokens);

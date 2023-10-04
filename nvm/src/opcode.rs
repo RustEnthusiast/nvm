@@ -87,6 +87,10 @@ pub enum OpCode {
     PopNum,
     /// Negates the `uint` value in the register at index `i`.
     ///
+    /// # Flags modified
+    ///
+    /// `zf`, `of`, `sf`.
+    ///
     /// # Format arguments
     ///
     /// - `u8 i` - The index of the register to negate.
@@ -94,14 +98,35 @@ pub enum OpCode {
     /// Adds the `uint` value in the register at index `i2` to the `uint` value in the register at
     /// index `i1`.
     ///
+    /// # Flags modified
+    ///
+    /// `zf`, `cf`.
+    ///
     /// # Format arguments
     ///
     /// - `u8 i1` - The index of the register to add to.
     ///
     /// - `u8 i2` - The index of the source register.
     Add,
+    /// Adds the `int` value in the register at index `i2` to the `int` value in the register at
+    /// index `i1`.
+    ///
+    /// # Flags modified
+    ///
+    /// `zf`, `of`, `sf`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the register to add to.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    AddI,
     /// Subtracts the `uint` value in the register at index `i2` from the `uint` value in the
     /// register at index `i1`.
+    ///
+    /// # Flags modified
+    ///
+    /// `zf`, `cf`.
     ///
     /// # Format arguments
     ///
@@ -109,24 +134,71 @@ pub enum OpCode {
     ///
     /// - `u8 i2` - The index of the source register.
     Sub,
-    /// Multiplies the `uint` value in the register at index `i2` with the `uint` value in the
+    /// Subtracts the `int` value in the register at index `i2` from the `int` value in the
     /// register at index `i1`.
+    ///
+    /// # Flags modified
+    ///
+    /// `zf`, `of`, `sf`.
     ///
     /// # Format arguments
     ///
-    /// - `u8 i1` - The index of the register to multiply.
+    /// - `u8 i1` - The index of the register to subtract from.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    SubI,
+    /// Multiplies the `uint` value in the register at index `i1` with the `uint` value in the
+    /// register at index `i2`.
+    ///
+    /// # Flags modified
+    ///
+    /// `zf`, `cf`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the destination register.
     ///
     /// - `u8 i2` - The index of the source register.
     Mul,
-    /// Divides the `uint` value in the register at index `i2` by the `uint` value in the
-    /// register at index `i1`.
+    /// Multiplies the `int` value in the register at index `i1` with the `int` value in the
+    /// register at index `i2`.
+    ///
+    /// # Flags modified
+    ///
+    /// `zf`, `of`, `sf`.
     ///
     /// # Format arguments
     ///
-    /// - `u8 i1` - The index of the register to divide.
+    /// - `u8 i1` - The index of the destination register.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    MulI,
+    /// Divides the `uint` value in the register at index `i1` by the `uint` value in the
+    /// register at index `i2`.
+    ///
+    /// # Flags modified
+    ///
+    /// `zf`, `cf`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the destination register.
     ///
     /// - `u8 i2` - The index of the source register.
     Div,
+    /// Divides the `int` value in the register at index `i1` by the `int` value in the
+    /// register at index `i2`.
+    ///
+    /// # Flags modified
+    ///
+    /// `zf`, `of`, `sf`.
+    ///
+    /// # Format arguments
+    ///
+    /// - `u8 i1` - The index of the destination register.
+    ///
+    /// - `u8 i2` - The index of the source register.
+    DivI,
     /// Performs a bitwise not operation on the `uint` value in the register at index `i`.
     ///
     /// # Format arguments
@@ -441,9 +513,13 @@ impl OpCode {
             | Self::PushNum
             | Self::PopNum
             | Self::Add
+            | Self::AddI
             | Self::Sub
+            | Self::SubI
             | Self::Mul
+            | Self::MulI
             | Self::Div
+            | Self::DivI
             | Self::And
             | Self::Or
             | Self::Xor

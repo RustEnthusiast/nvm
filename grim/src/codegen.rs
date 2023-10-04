@@ -69,9 +69,21 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             }
             Item::Instruction(Instruction::Neg(r)) => bytes.extend([OpCode::Neg as _, r]),
             Item::Instruction(Instruction::Add(r1, r2)) => bytes.extend([OpCode::Add as _, r1, r2]),
+            Item::Instruction(Instruction::AddI(r1, r2)) => {
+                bytes.extend([OpCode::AddI as _, r1, r2]);
+            }
             Item::Instruction(Instruction::Sub(r1, r2)) => bytes.extend([OpCode::Sub as _, r1, r2]),
+            Item::Instruction(Instruction::SubI(r1, r2)) => {
+                bytes.extend([OpCode::SubI as _, r1, r2]);
+            }
             Item::Instruction(Instruction::Mul(r1, r2)) => bytes.extend([OpCode::Mul as _, r1, r2]),
+            Item::Instruction(Instruction::MulI(r1, r2)) => {
+                bytes.extend([OpCode::MulI as _, r1, r2]);
+            }
             Item::Instruction(Instruction::Div(r1, r2)) => bytes.extend([OpCode::Div as _, r1, r2]),
+            Item::Instruction(Instruction::DivI(r1, r2)) => {
+                bytes.extend([OpCode::DivI as _, r1, r2]);
+            }
             Item::Instruction(Instruction::Not(r)) => bytes.extend([OpCode::Not as _, r]),
             Item::Instruction(Instruction::And(r1, r2)) => bytes.extend([OpCode::And as _, r1, r2]),
             Item::Instruction(Instruction::Or(r1, r2)) => bytes.extend([OpCode::Or as _, r1, r2]),

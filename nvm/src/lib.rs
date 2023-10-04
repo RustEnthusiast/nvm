@@ -203,12 +203,6 @@ enum Flags {
     Sign = 1 << 3,
 }
 
-/// Computes a checked negation operation on an [isize].
-#[inline]
-fn checked_neg(x: isize) -> Result<isize, NvmError> {
-    x.checked_neg().ok_or(NvmError::OverflowError)
-}
-
 /// Computes a checked addition operation on a [usize].
 #[inline]
 fn checked_add(x: usize, y: usize) -> Result<usize, NvmError> {
@@ -219,18 +213,6 @@ fn checked_add(x: usize, y: usize) -> Result<usize, NvmError> {
 #[inline]
 fn checked_sub(x: usize, y: usize) -> Result<usize, NvmError> {
     x.checked_sub(y).ok_or(NvmError::OverflowError)
-}
-
-/// Computes a checked multiplication operation on a [usize].
-#[inline]
-fn checked_mul(x: usize, y: usize) -> Result<usize, NvmError> {
-    x.checked_mul(y).ok_or(NvmError::OverflowError)
-}
-
-/// Computes a checked division operation on a [usize].
-#[inline]
-fn checked_div(x: usize, y: usize) -> Result<usize, NvmError> {
-    x.checked_div(y).ok_or(NvmError::OverflowError)
 }
 
 /// The NVM virtual machine.
@@ -474,36 +456,167 @@ impl VM {
                     *self.sp_mut() = checked_sub(self.sp(), n)?;
                 }
                 OpCode::Neg => {
-                    let r = self.reg_mut(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
-                    *r = checked_neg(*r as _)? as _;
+                    let r = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    let (n, o) = (self.reg(r)? as isize).overflowing_neg();
+                    match o {
+                        true => *self.flags_mut() |= Flags::Overflow as usize,
+                        false => *self.flags_mut() &= !(Flags::Overflow as usize),
+                    }
+                    if n == 0 {
+                        *self.flags_mut() =
+                            self.flags() | Flags::Zero as usize & !(Flags::Sign as usize);
+                    } else {
+                        *self.flags_mut() &= !(Flags::Zero as usize);
+                        match n < 0 {
+                            true => *self.flags_mut() |= Flags::Sign as usize,
+                            false => *self.flags_mut() &= !(Flags::Sign as usize),
+                        }
+                    }
+                    *self.reg_mut(r)? = n as _;
                 }
                 OpCode::Add => {
                     ip = checked_add(ip, 1)?;
                     let left = memory.read::<u8>(ip)? as _;
                     let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left = checked_add(*left, right)?;
+                    let (add, c) = self.reg(left)?.overflowing_add(right);
+                    match c {
+                        true => *self.flags_mut() |= Flags::Carry as usize,
+                        false => *self.flags_mut() &= !(Flags::Carry as usize),
+                    }
+                    match add == 0 {
+                        true => *self.flags_mut() |= Flags::Zero as usize,
+                        false => *self.flags_mut() &= !(Flags::Zero as usize),
+                    }
+                    *self.reg_mut(left)? = add;
+                }
+                OpCode::AddI => {
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let (add, o) = (self.reg(left)? as isize).overflowing_add(right as isize);
+                    match o {
+                        true => *self.flags_mut() |= Flags::Overflow as usize,
+                        false => *self.flags_mut() &= !(Flags::Overflow as usize),
+                    }
+                    if add == 0 {
+                        *self.flags_mut() =
+                            self.flags() | Flags::Zero as usize & !(Flags::Sign as usize);
+                    } else {
+                        *self.flags_mut() &= !(Flags::Zero as usize);
+                        match add < 0 {
+                            true => *self.flags_mut() |= Flags::Sign as usize,
+                            false => *self.flags_mut() &= !(Flags::Sign as usize),
+                        }
+                    }
+                    *self.reg_mut(left)? = add as _;
                 }
                 OpCode::Sub => {
                     ip = checked_add(ip, 1)?;
                     let left = memory.read::<u8>(ip)? as _;
                     let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left = checked_sub(*left, right)?;
+                    let (sub, c) = self.reg(left)?.overflowing_sub(right);
+                    match c {
+                        true => *self.flags_mut() |= Flags::Carry as usize,
+                        false => *self.flags_mut() &= !(Flags::Carry as usize),
+                    }
+                    match sub == 0 {
+                        true => *self.flags_mut() |= Flags::Zero as usize,
+                        false => *self.flags_mut() &= !(Flags::Zero as usize),
+                    }
+                    *self.reg_mut(left)? = sub;
+                }
+                OpCode::SubI => {
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let (sub, o) = (self.reg(left)? as isize).overflowing_sub(right as isize);
+                    match o {
+                        true => *self.flags_mut() |= Flags::Overflow as usize,
+                        false => *self.flags_mut() &= !(Flags::Overflow as usize),
+                    }
+                    if sub == 0 {
+                        *self.flags_mut() =
+                            self.flags() | Flags::Zero as usize & !(Flags::Sign as usize);
+                    } else {
+                        *self.flags_mut() &= !(Flags::Zero as usize);
+                        match sub < 0 {
+                            true => *self.flags_mut() |= Flags::Sign as usize,
+                            false => *self.flags_mut() &= !(Flags::Sign as usize),
+                        }
+                    }
+                    *self.reg_mut(left)? = sub as _;
                 }
                 OpCode::Mul => {
                     ip = checked_add(ip, 1)?;
                     let left = memory.read::<u8>(ip)? as _;
                     let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left = checked_mul(*left, right)?;
+                    let (mul, c) = self.reg(left)?.overflowing_mul(right);
+                    match c {
+                        true => *self.flags_mut() |= Flags::Carry as usize,
+                        false => *self.flags_mut() &= !(Flags::Carry as usize),
+                    }
+                    match mul == 0 {
+                        true => *self.flags_mut() |= Flags::Zero as usize,
+                        false => *self.flags_mut() &= !(Flags::Zero as usize),
+                    }
+                    *self.reg_mut(left)? = mul;
+                }
+                OpCode::MulI => {
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let (mul, o) = (self.reg(left)? as isize).overflowing_mul(right as isize);
+                    match o {
+                        true => *self.flags_mut() |= Flags::Overflow as usize,
+                        false => *self.flags_mut() &= !(Flags::Overflow as usize),
+                    }
+                    if mul == 0 {
+                        *self.flags_mut() =
+                            self.flags() | Flags::Zero as usize & !(Flags::Sign as usize);
+                    } else {
+                        *self.flags_mut() &= !(Flags::Zero as usize);
+                        match mul < 0 {
+                            true => *self.flags_mut() |= Flags::Sign as usize,
+                            false => *self.flags_mut() &= !(Flags::Sign as usize),
+                        }
+                    }
+                    *self.reg_mut(left)? = mul as _;
                 }
                 OpCode::Div => {
                     ip = checked_add(ip, 1)?;
                     let left = memory.read::<u8>(ip)? as _;
                     let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
-                    let left = self.reg_mut(left)?;
-                    *left = checked_div(*left, right)?;
+                    let (div, c) = self.reg(left)?.overflowing_div(right);
+                    match c {
+                        true => *self.flags_mut() |= Flags::Carry as usize,
+                        false => *self.flags_mut() &= !(Flags::Carry as usize),
+                    }
+                    match div == 0 {
+                        true => *self.flags_mut() |= Flags::Zero as usize,
+                        false => *self.flags_mut() &= !(Flags::Zero as usize),
+                    }
+                    *self.reg_mut(left)? = div;
+                }
+                OpCode::DivI => {
+                    ip = checked_add(ip, 1)?;
+                    let left = memory.read::<u8>(ip)? as _;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let (div, o) = (self.reg(left)? as isize).overflowing_div(right as isize);
+                    match o {
+                        true => *self.flags_mut() |= Flags::Overflow as usize,
+                        false => *self.flags_mut() &= !(Flags::Overflow as usize),
+                    }
+                    if div == 0 {
+                        *self.flags_mut() =
+                            self.flags() | Flags::Zero as usize & !(Flags::Sign as usize);
+                    } else {
+                        *self.flags_mut() &= !(Flags::Zero as usize);
+                        match div < 0 {
+                            true => *self.flags_mut() |= Flags::Sign as usize,
+                            false => *self.flags_mut() &= !(Flags::Sign as usize),
+                        }
+                    }
+                    *self.reg_mut(left)? = div as _;
                 }
                 OpCode::Not => {
                     let r = self.reg_mut(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
