@@ -43,6 +43,7 @@
     clippy::suspicious
 )]
 #![allow(
+    clippy::absolute_paths,
     clippy::as_conversions,
     clippy::as_underscore,
     clippy::blanket_clippy_restriction_lints,
@@ -69,7 +70,9 @@
 pub mod opcode;
 use self::opcode::OpCode;
 use bytemuck::NoUninit;
-use core::{ffi::FromBytesUntilNulError, num::TryFromIntError, str::Utf8Error};
+use core::{
+    convert::Infallible, ffi::FromBytesUntilNulError, num::TryFromIntError, str::Utf8Error,
+};
 use num_traits::FromPrimitive;
 #[cfg(feature = "std")]
 use ::{
@@ -91,6 +94,9 @@ use ::{
 #[derive(Debug)]
 #[cfg_attr(feature = "std", derive(Error))]
 pub enum NvmError {
+    /// An error that can never occur.
+    #[cfg_attr(feature = "std", error("this error should never be encountered"))]
+    Infallible,
     /// An invalid instruction/operation code was encountered.
     #[cfg_attr(
         feature = "std",
@@ -148,7 +154,7 @@ pub enum NvmError {
     OverflowError,
     /// The virtual machine encountered an unexpected conversion error.
     #[cfg_attr(feature = "std", error(transparent))]
-    TryFromIntError(#[cfg_attr(feature = "std", from)] TryFromIntError),
+    TryFromIntError(TryFromIntError),
     /// A C string was expected to end with a null terminating byte but none was found.
     #[cfg_attr(feature = "std", error(transparent))]
     FromBytesUntilNulError(#[cfg_attr(feature = "std", from)] FromBytesUntilNulError),
@@ -159,6 +165,20 @@ pub enum NvmError {
     #[cfg(feature = "std")]
     #[cfg_attr(feature = "std", error(transparent))]
     LibLoadingError(#[cfg_attr(feature = "std", from)] LibLoadingError),
+}
+impl From<Infallible> for NvmError {
+    /// Converts an [`Infallible`] error into an [`NvmError`].
+    #[inline]
+    fn from(_: Infallible) -> Self {
+        Self::Infallible
+    }
+}
+impl From<TryFromIntError> for NvmError {
+    /// Converts a [`TryFromIntError`] error into an [`NvmError`].
+    #[inline]
+    fn from(value: TryFromIntError) -> Self {
+        Self::TryFromIntError(value)
+    }
 }
 
 /// A trait that implementors can use to define the behavior of virtual memory reads and writes.
@@ -320,30 +340,32 @@ impl VM {
             let opcode = OpCode::from_u8(op).ok_or(NvmError::InvalidOperation(op))?;
             *self.ip_mut() = checked_add(ip, opcode.size())?;
             match opcode {
-                OpCode::Exit => return self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _),
+                OpCode::Exit => {
+                    return self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?);
+                }
                 OpCode::Nop => {}
                 OpCode::Move => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     *self.reg_mut(left)? = self.reg(right)?;
                 }
                 OpCode::MoveConst => {
                     ip = checked_add(ip, 1)?;
-                    let r = self.reg_mut(memory.read::<u8>(ip)? as _)?;
+                    let r = self.reg_mut(memory.read::<u8>(ip)?.try_into()?)?;
                     *r = memory.read::<usize>(checked_add(ip, 1)?)?;
                 }
                 OpCode::Load => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     *self.reg_mut(left)? = memory.read(self.reg(right)?)?;
                 }
                 OpCode::LoadNum => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
                     ip = checked_add(ip, 1)?;
-                    let right = memory.read::<u8>(ip)? as _;
+                    let right = memory.read::<u8>(ip)?.try_into()?;
                     let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let pos = self.reg(right)?;
                     let Some(mem) = memory.buffer().get(pos..checked_add(pos, n)?) else {
@@ -376,15 +398,15 @@ impl VM {
                 }
                 OpCode::Store => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     memory.write(self.reg(left)?, &self.reg(right)?)?;
                 }
                 OpCode::StoreNum => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
                     ip = checked_add(ip, 1)?;
-                    let right = memory.read::<u8>(ip)? as _;
+                    let right = memory.read::<u8>(ip)?.try_into()?;
                     let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let bytes = self.reg(right)?.to_ne_bytes();
                     #[cfg(target_endian = "little")]
@@ -398,12 +420,12 @@ impl VM {
                     memory.write_bytes(self.reg(left)?, bytes)?;
                 }
                 OpCode::Push => {
-                    let r = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    let r = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     self.push(memory, &self.reg(r)?)?;
                 }
                 OpCode::PushNum => {
                     ip = checked_add(ip, 1)?;
-                    let r = memory.read::<u8>(ip)? as _;
+                    let r = memory.read::<u8>(ip)?.try_into()?;
                     let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let bytes = self.reg(r)?.to_ne_bytes();
                     #[cfg(target_endian = "little")]
@@ -418,12 +440,12 @@ impl VM {
                     *self.sp_mut() = checked_add(self.sp(), n)?;
                 }
                 OpCode::Pop => {
-                    let r = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    let r = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     *self.reg_mut(r)? = self.pop(memory)?;
                 }
                 OpCode::PopNum => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
                     let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let pos = checked_sub(self.sp(), n)?;
                     let Some(mem) = memory.buffer().get(pos..self.sp()) else {
@@ -456,7 +478,8 @@ impl VM {
                     *self.sp_mut() = checked_sub(self.sp(), n)?;
                 }
                 OpCode::Neg => {
-                    let r = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                    let r = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    #[allow(clippy::cast_possible_wrap)]
                     let (n, o) = (self.reg(r)? as isize).overflowing_neg();
                     match o {
                         true => *self.flags_mut() |= Flags::Overflow as usize,
@@ -472,12 +495,12 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(r)? = n as _;
+                    *self.reg_mut(r)? = n.try_into()?;
                 }
                 OpCode::Add => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     let (add, c) = self.reg(left)?.overflowing_add(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -491,8 +514,9 @@ impl VM {
                 }
                 OpCode::AddI => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    #[allow(clippy::cast_possible_wrap)]
                     let (add, o) = (self.reg(left)? as isize).overflowing_add(right as isize);
                     match o {
                         true => *self.flags_mut() |= Flags::Overflow as usize,
@@ -508,12 +532,12 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(left)? = add as _;
+                    *self.reg_mut(left)? = add.try_into()?;
                 }
                 OpCode::Sub => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     let (sub, c) = self.reg(left)?.overflowing_sub(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -527,8 +551,9 @@ impl VM {
                 }
                 OpCode::SubI => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    #[allow(clippy::cast_possible_wrap)]
                     let (sub, o) = (self.reg(left)? as isize).overflowing_sub(right as isize);
                     match o {
                         true => *self.flags_mut() |= Flags::Overflow as usize,
@@ -544,12 +569,12 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(left)? = sub as _;
+                    *self.reg_mut(left)? = sub.try_into()?;
                 }
                 OpCode::Mul => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     let (mul, c) = self.reg(left)?.overflowing_mul(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -563,8 +588,9 @@ impl VM {
                 }
                 OpCode::MulI => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    #[allow(clippy::cast_possible_wrap)]
                     let (mul, o) = (self.reg(left)? as isize).overflowing_mul(right as isize);
                     match o {
                         true => *self.flags_mut() |= Flags::Overflow as usize,
@@ -580,12 +606,12 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(left)? = mul as _;
+                    *self.reg_mut(left)? = mul.try_into()?;
                 }
                 OpCode::Div => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     let (div, c) = self.reg(left)?.overflowing_div(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -599,8 +625,9 @@ impl VM {
                 }
                 OpCode::DivI => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    #[allow(clippy::cast_possible_wrap)]
                     let (div, o) = (self.reg(left)? as isize).overflowing_div(right as isize);
                     match o {
                         true => *self.flags_mut() |= Flags::Overflow as usize,
@@ -616,40 +643,40 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(left)? = div as _;
+                    *self.reg_mut(left)? = div.try_into()?;
                 }
                 OpCode::Not => {
-                    let r = self.reg_mut(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let r = self.reg_mut(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     *r = !*r;
                 }
                 OpCode::And => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? &= right;
                 }
                 OpCode::Or => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? |= right;
                 }
                 OpCode::Xor => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? ^= right;
                 }
                 OpCode::Shl => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? <<= right;
                 }
                 OpCode::Shr => {
                     ip = checked_add(ip, 1)?;
-                    let left = memory.read::<u8>(ip)? as _;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = memory.read::<u8>(ip)?.try_into()?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? >>= right;
                 }
                 OpCode::Call => {
@@ -659,8 +686,8 @@ impl VM {
                 OpCode::Return => *self.ip_mut() = self.pop(memory)?,
                 OpCode::Cmp => {
                     ip = checked_add(ip, 1)?;
-                    let left = self.reg(memory.read::<u8>(ip)? as _)?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                    let left = self.reg(memory.read::<u8>(ip)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                     let (_, c) = left.overflowing_sub(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -771,7 +798,7 @@ impl VM {
                 OpCode::LoadLib => {
                     #[cfg(feature = "std")]
                     {
-                        let r = memory.read::<u8>(checked_add(ip, 1)?)? as _;
+                        let r = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                         let pos = self.reg(r)?;
                         let name = memory
                             .buffer()
@@ -806,8 +833,9 @@ impl VM {
                     #[cfg(feature = "std")]
                     {
                         ip = checked_add(ip, 1)?;
-                        let left = memory.read::<u8>(ip)? as _;
-                        let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                        let left = memory.read::<u8>(ip)?.try_into()?;
+                        let right =
+                            self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         let lib = unsafe { &*(right as *const Library) };
                         let pos = self.reg(left)?;
@@ -867,8 +895,9 @@ impl VM {
                             }
                         }
                         ip = checked_add(ip, 1)?;
-                        let left = self.reg(memory.read::<u8>(ip)? as _)?;
-                        let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                        let left = self.reg(memory.read::<u8>(ip)?.try_into()?)?;
+                        let right =
+                            self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                         #[allow(clippy::collection_is_never_read)]
                         let mut types = Vec::with_capacity(right);
                         let mut raw_types = Vec::with_capacity(right);
@@ -926,7 +955,7 @@ impl VM {
                 OpCode::FreeLib => {
                     #[cfg(feature = "std")]
                     {
-                        let r = self.reg(memory.read::<u8>(checked_add(ip, 1)?)? as _)?;
+                        let r = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         unsafe { drop(Box::from_raw(r as *mut Library)) };
                     }
