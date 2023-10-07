@@ -374,8 +374,7 @@ impl VM {
                         return Err(NvmError::MemoryReadError { pos, len: n });
                     };
                     let bytes = bytemuck::bytes_of_mut(self.reg_mut(left)?);
-                    #[cfg(target_endian = "little")]
-                    {
+                    if cfg!(target_endian = "little") {
                         match bytes.get_mut(..n) {
                             Some(bytes) => bytes.copy_from_slice(mem),
                             _ => return Err(NvmError::RegisterWriteError),
@@ -384,15 +383,13 @@ impl VM {
                             Some(bytes) => bytes.fill(0),
                             _ => return Err(NvmError::RegisterWriteError),
                         }
-                    }
-                    #[cfg(target_endian = "big")]
-                    {
+                    } else {
                         let len = bytes.len();
-                        match bytes.get_mut(len - n..) {
+                        match bytes.get_mut(checked_sub(len, n)?..) {
                             Some(bytes) => bytes.copy_from_slice(mem),
                             _ => return Err(NvmError::RegisterWriteError),
                         }
-                        match bytes.get_mut(..len - n) {
+                        match bytes.get_mut(..checked_sub(len, n)?) {
                             Some(bytes) => bytes.fill(0),
                             _ => return Err(NvmError::RegisterWriteError),
                         }
@@ -411,14 +408,11 @@ impl VM {
                     let right = memory.read::<u8>(ip)?.try_into()?;
                     let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let bytes = self.reg(right)?.to_ne_bytes();
-                    #[cfg(target_endian = "little")]
-                    let Some(bytes) = bytes.get(..n) else {
-                        return Err(NvmError::RegisterReadError);
-                    };
-                    #[cfg(target_endian = "big")]
-                    let Some(bytes) = bytes.get(bytes.len() - n..) else {
-                        return Err(NvmError::RegisterReadError);
-                    };
+                    let bytes = match cfg!(target_endian = "little") {
+                        true => bytes.get(..n),
+                        false => bytes.get(checked_sub(bytes.len(), n)?..),
+                    }
+                    .ok_or(NvmError::RegisterReadError)?;
                     memory.write_bytes(self.reg(left)?, bytes)?;
                 }
                 OpCode::Push => {
@@ -430,14 +424,11 @@ impl VM {
                     let r = memory.read::<u8>(ip)?.try_into()?;
                     let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
                     let bytes = self.reg(r)?.to_ne_bytes();
-                    #[cfg(target_endian = "little")]
-                    let Some(bytes) = bytes.get(..n) else {
-                        return Err(NvmError::RegisterReadError);
-                    };
-                    #[cfg(target_endian = "big")]
-                    let Some(bytes) = bytes.get(bytes.len() - n..) else {
-                        return Err(NvmError::RegisterReadError);
-                    };
+                    let bytes = match cfg!(target_endian = "little") {
+                        true => bytes.get(..n),
+                        false => bytes.get(checked_sub(bytes.len(), n)?..),
+                    }
+                    .ok_or(NvmError::RegisterReadError)?;
                     memory.write_bytes(self.sp(), bytes)?;
                     *self.sp_mut() = checked_add(self.sp(), n)?;
                 }
@@ -454,8 +445,7 @@ impl VM {
                         return Err(NvmError::MemoryReadError { pos, len: n });
                     };
                     let bytes = bytemuck::bytes_of_mut(self.reg_mut(left)?);
-                    #[cfg(target_endian = "little")]
-                    {
+                    if cfg!(target_endian = "little") {
                         match bytes.get_mut(..n) {
                             Some(bytes) => bytes.copy_from_slice(mem),
                             _ => return Err(NvmError::RegisterWriteError),
@@ -464,15 +454,13 @@ impl VM {
                             Some(bytes) => bytes.fill(0),
                             _ => return Err(NvmError::RegisterWriteError),
                         }
-                    }
-                    #[cfg(target_endian = "big")]
-                    {
+                    } else {
                         let len = bytes.len();
-                        match bytes.get_mut(len - n..) {
+                        match bytes.get_mut(checked_sub(len, n)?..) {
                             Some(bytes) => bytes.copy_from_slice(mem),
                             _ => return Err(NvmError::RegisterWriteError),
                         }
-                        match bytes.get_mut(..len - n) {
+                        match bytes.get_mut(..checked_sub(len, n)?) {
                             Some(bytes) => bytes.fill(0),
                             _ => return Err(NvmError::RegisterWriteError),
                         }
