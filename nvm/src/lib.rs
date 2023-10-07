@@ -67,6 +67,8 @@
     clippy::single_call_fn,
     clippy::std_instead_of_core
 )]
+#[cfg(feature = "std")]
+extern crate alloc;
 pub mod opcode;
 use self::opcode::OpCode;
 use bytemuck::NoUninit;
@@ -76,6 +78,7 @@ use core::{
 use num_traits::FromPrimitive;
 #[cfg(feature = "std")]
 use ::{
+    alloc::borrow::Cow,
     core::{ffi::CStr, mem::MaybeUninit, ptr::addr_of_mut},
     libffi::{
         middle::Type,
@@ -83,7 +86,6 @@ use ::{
     },
     libloading::{Error as LibLoadingError, Library},
     std::{
-        borrow::Cow,
         env::consts::{DLL_EXTENSION, DLL_PREFIX, DLL_SUFFIX},
         path::PathBuf,
     },
@@ -495,7 +497,10 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(r)? = n.try_into()?;
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        *self.reg_mut(r)? = n as _;
+                    }
                 }
                 OpCode::Add => {
                     ip = checked_add(ip, 1)?;
@@ -532,7 +537,10 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(left)? = add.try_into()?;
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        *self.reg_mut(left)? = add as _;
+                    }
                 }
                 OpCode::Sub => {
                     ip = checked_add(ip, 1)?;
@@ -569,7 +577,10 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(left)? = sub.try_into()?;
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        *self.reg_mut(left)? = sub as _;
+                    }
                 }
                 OpCode::Mul => {
                     ip = checked_add(ip, 1)?;
@@ -606,7 +617,10 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(left)? = mul.try_into()?;
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        *self.reg_mut(left)? = mul as _;
+                    }
                 }
                 OpCode::Div => {
                     ip = checked_add(ip, 1)?;
@@ -643,7 +657,10 @@ impl VM {
                             false => *self.flags_mut() &= !(Flags::Sign as usize),
                         }
                     }
-                    *self.reg_mut(left)? = div.try_into()?;
+                    #[allow(clippy::cast_sign_loss)]
+                    {
+                        *self.reg_mut(left)? = div as _;
+                    }
                 }
                 OpCode::Not => {
                     let r = self.reg_mut(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
@@ -823,10 +840,7 @@ impl VM {
                         }
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         let lib = unsafe { Library::new(path) };
-                        *self.reg_mut(r)? = match lib {
-                            Ok(lib) => Box::into_raw(Box::new(lib)) as _,
-                            _ => 0,
-                        };
+                        *self.reg_mut(r)? = lib.map_or(0, |lib| Box::into_raw(Box::new(lib)) as _);
                     }
                 }
                 OpCode::LoadSym => {
@@ -846,10 +860,7 @@ impl VM {
                         let name = CStr::from_bytes_until_nul(name)?;
                         // SAFETY: We're using an opaque function pointer.
                         let sym = unsafe { lib.get::<fn()>(name.to_bytes()) };
-                        *self.reg_mut(left)? = match sym {
-                            Ok(sym) => *sym as _,
-                            _ => 0,
-                        };
+                        *self.reg_mut(left)? = sym.map_or(0, |sym| *sym as _);
                     }
                 }
                 OpCode::Syscall => {
