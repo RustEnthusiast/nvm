@@ -332,7 +332,7 @@ impl VM {
     ///
     /// This operation may return an error at any time while executing NVM bytecode.
     #[allow(clippy::too_many_lines)]
-    pub fn run(mut self, code: &[u8], memory: &mut impl MemoryDriver) -> Result<usize, NvmError> {
+    pub fn run(&mut self, code: &[u8], memory: &mut impl MemoryDriver) -> Result<usize, NvmError> {
         memory.write_bytes(0, code)?;
         *self.sp_mut() = code.len();
         loop {
@@ -877,11 +877,11 @@ impl VM {
                         let mut types = Vec::with_capacity(right);
                         let mut raw_types = Vec::with_capacity(right);
                         for _ in 0..right {
-                            let ty = next_type(&mut self, memory)?;
+                            let ty = next_type(self, memory)?;
                             raw_types.push(ty.as_raw_ptr());
                             types.push(ty);
                         }
-                        let ret = next_type(&mut self, memory)?;
+                        let ret = next_type(self, memory)?;
                         // SAFETY: `ret` is stored on the stack.
                         let ret_size = unsafe { (*ret.as_raw_ptr()).size };
                         let mut cif = MaybeUninit::uninit();

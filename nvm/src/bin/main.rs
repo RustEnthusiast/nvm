@@ -52,7 +52,11 @@ pub enum ProgramError {
 fn main() -> Result<(), ProgramError> {
     if let Some(f) = std::env::args_os().nth(1) {
         let mut memory = Memory::new();
-        std::process::exit(VM::new().run(&std::fs::read(f)?, &mut memory)?.try_into()?);
+        let mut vm = VM::new();
+        match vm.run(&std::fs::read(f)?, &mut memory) {
+            Ok(code) => std::process::exit(code.try_into()?),
+            Err(err) => panic!("error: {err}\nvirtual machine state: {vm:?}"),
+        }
     }
     Ok(())
 }
