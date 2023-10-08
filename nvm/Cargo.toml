@@ -2,6 +2,7 @@
 name = "nvm"
 version = "0.0.0"
 edition = "2021"
+build = "build.rs"
 
 [[bin]]
 name = "nvm"
@@ -9,10 +10,14 @@ path = "src/bin/main.rs"
 required-features = ["bin"]
 
 [features]
-bin = ["std"]
+bin = ["build_const", "std"]
 std = ["libffi", "libloading", "thiserror"]
 
+[build-dependencies]
+build_const = { version = "0.2", optional = true }
+
 [dependencies]
+build_const = { version = "0.2", optional = true, default-features = false }
 bytemuck = "1.13"
 libffi = { version = "3.2", optional = true }
 libloading = { version = "0.8", optional = true }

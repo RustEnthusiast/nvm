@@ -66,6 +66,7 @@
     clippy::single_call_fn,
     clippy::std_instead_of_core
 )]
+#![cfg_attr(feature = "bin", allow(unused_crate_dependencies))]
 #[cfg(feature = "std")]
 extern crate alloc;
 pub mod opcode;

@@ -1,22 +1,21 @@
 //! The virtual memory driver.
+use build_const::build_const;
 use bytemuck::NoUninit;
 use nvm::{opcode::OpCode, MemoryDriver, NvmError};
 use std::ptr::addr_of;
+build_const!("constants");
 
 /// The virtual memory driver.
 pub struct Memory {
     /// The buffer of memory to use as virtual machine RAM.
-    buffer: [u8; Self::BYTE_COUNT],
+    buffer: [u8; STACK_SIZE],
 }
 impl Memory {
-    /// A constant defining the amount of memory (in bytes) the memory driver has.
-    const BYTE_COUNT: usize = (u8::MAX as usize).saturating_add(1);
-
     /// Creates a new memory driver using `buffer` as a virtual memory buffer.
     #[inline]
     pub const fn new() -> Self {
         Self {
-            buffer: [OpCode::Exit as _; Self::BYTE_COUNT],
+            buffer: [OpCode::Exit as _; STACK_SIZE],
         }
     }
 }
