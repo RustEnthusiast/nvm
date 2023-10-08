@@ -45,7 +45,6 @@
 #![allow(
     clippy::absolute_paths,
     clippy::as_conversions,
-    clippy::as_underscore,
     clippy::blanket_clippy_restriction_lints,
     clippy::cargo_common_metadata,
     clippy::cognitive_complexity,
@@ -368,32 +367,20 @@ impl VM {
                     let left = memory.read::<u8>(ip)?.try_into()?;
                     ip = checked_add(ip, 1)?;
                     let right = memory.read::<u8>(ip)?.try_into()?;
-                    let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
+                    let n = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     let pos = self.reg(right)?;
                     let Some(mem) = memory.buffer().get(pos..checked_add(pos, n)?) else {
                         return Err(NvmError::MemoryReadError { pos, len: n });
                     };
-                    let bytes = bytemuck::bytes_of_mut(self.reg_mut(left)?);
-                    if cfg!(target_endian = "little") {
-                        match bytes.get_mut(..n) {
-                            Some(bytes) => bytes.copy_from_slice(mem),
-                            _ => return Err(NvmError::RegisterWriteError),
-                        }
-                        match bytes.get_mut(n..) {
-                            Some(bytes) => bytes.fill(0),
-                            _ => return Err(NvmError::RegisterWriteError),
-                        }
-                    } else {
-                        let len = bytes.len();
-                        match bytes.get_mut(checked_sub(len, n)?..) {
-                            Some(bytes) => bytes.copy_from_slice(mem),
-                            _ => return Err(NvmError::RegisterWriteError),
-                        }
-                        match bytes.get_mut(..checked_sub(len, n)?) {
-                            Some(bytes) => bytes.fill(0),
-                            _ => return Err(NvmError::RegisterWriteError),
-                        }
+                    let r = self.reg_mut(left)?;
+                    *r = 0;
+                    let bytes = bytemuck::bytes_of_mut(r);
+                    let bytes = match cfg!(target_endian = "little") {
+                        true => bytes.get_mut(..n),
+                        false => bytes.get_mut(checked_sub(bytes.len(), n)?..),
                     }
+                    .ok_or(NvmError::RegisterWriteError)?;
+                    bytes.copy_from_slice(mem);
                 }
                 OpCode::Store => {
                     ip = checked_add(ip, 1)?;
@@ -406,7 +393,7 @@ impl VM {
                     let left = memory.read::<u8>(ip)?.try_into()?;
                     ip = checked_add(ip, 1)?;
                     let right = memory.read::<u8>(ip)?.try_into()?;
-                    let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
+                    let n = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     let bytes = self.reg(right)?.to_ne_bytes();
                     let bytes = match cfg!(target_endian = "little") {
                         true => bytes.get(..n),
@@ -422,7 +409,7 @@ impl VM {
                 OpCode::PushNum => {
                     ip = checked_add(ip, 1)?;
                     let r = memory.read::<u8>(ip)?.try_into()?;
-                    let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
+                    let n = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     let bytes = self.reg(r)?.to_ne_bytes();
                     let bytes = match cfg!(target_endian = "little") {
                         true => bytes.get(..n),
@@ -439,32 +426,20 @@ impl VM {
                 OpCode::PopNum => {
                     ip = checked_add(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let n = memory.read::<u8>(checked_add(ip, 1)?)? as usize;
+                    let n = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
                     let pos = checked_sub(self.sp(), n)?;
                     let Some(mem) = memory.buffer().get(pos..self.sp()) else {
                         return Err(NvmError::MemoryReadError { pos, len: n });
                     };
-                    let bytes = bytemuck::bytes_of_mut(self.reg_mut(left)?);
-                    if cfg!(target_endian = "little") {
-                        match bytes.get_mut(..n) {
-                            Some(bytes) => bytes.copy_from_slice(mem),
-                            _ => return Err(NvmError::RegisterWriteError),
-                        }
-                        match bytes.get_mut(n..) {
-                            Some(bytes) => bytes.fill(0),
-                            _ => return Err(NvmError::RegisterWriteError),
-                        }
-                    } else {
-                        let len = bytes.len();
-                        match bytes.get_mut(checked_sub(len, n)?..) {
-                            Some(bytes) => bytes.copy_from_slice(mem),
-                            _ => return Err(NvmError::RegisterWriteError),
-                        }
-                        match bytes.get_mut(..checked_sub(len, n)?) {
-                            Some(bytes) => bytes.fill(0),
-                            _ => return Err(NvmError::RegisterWriteError),
-                        }
+                    let r = self.reg_mut(left)?;
+                    *r = 0;
+                    let bytes = bytemuck::bytes_of_mut(r);
+                    let bytes = match cfg!(target_endian = "little") {
+                        true => bytes.get_mut(..n),
+                        false => bytes.get_mut(checked_sub(bytes.len(), n)?..),
                     }
+                    .ok_or(NvmError::RegisterWriteError)?;
+                    bytes.copy_from_slice(mem);
                     *self.sp_mut() = checked_sub(self.sp(), n)?;
                 }
                 OpCode::Neg => {
@@ -487,7 +462,7 @@ impl VM {
                     }
                     #[allow(clippy::cast_sign_loss)]
                     {
-                        *self.reg_mut(r)? = n as _;
+                        *self.reg_mut(r)? = n as usize;
                     }
                 }
                 OpCode::Add => {
@@ -527,7 +502,7 @@ impl VM {
                     }
                     #[allow(clippy::cast_sign_loss)]
                     {
-                        *self.reg_mut(left)? = add as _;
+                        *self.reg_mut(left)? = add as usize;
                     }
                 }
                 OpCode::Sub => {
@@ -567,7 +542,7 @@ impl VM {
                     }
                     #[allow(clippy::cast_sign_loss)]
                     {
-                        *self.reg_mut(left)? = sub as _;
+                        *self.reg_mut(left)? = sub as usize;
                     }
                 }
                 OpCode::Mul => {
@@ -607,7 +582,7 @@ impl VM {
                     }
                     #[allow(clippy::cast_sign_loss)]
                     {
-                        *self.reg_mut(left)? = mul as _;
+                        *self.reg_mut(left)? = mul as usize;
                     }
                 }
                 OpCode::Div => {
@@ -647,7 +622,7 @@ impl VM {
                     }
                     #[allow(clippy::cast_sign_loss)]
                     {
-                        *self.reg_mut(left)? = div as _;
+                        *self.reg_mut(left)? = div as usize;
                     }
                 }
                 OpCode::Not => {
@@ -828,7 +803,8 @@ impl VM {
                         }
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         let lib = unsafe { Library::new(path) };
-                        *self.reg_mut(r)? = lib.map_or(0, |lib| Box::into_raw(Box::new(lib)) as _);
+                        *self.reg_mut(r)? =
+                            lib.map_or(0, |lib| Box::into_raw(Box::new(lib)) as usize);
                     }
                 }
                 OpCode::LoadSym => {
@@ -848,7 +824,7 @@ impl VM {
                         let name = CStr::from_bytes_until_nul(name)?;
                         // SAFETY: We're using an opaque function pointer.
                         let sym = unsafe { lib.get::<fn()>(name.to_bytes()) };
-                        *self.reg_mut(left)? = sym.map_or(0, |sym| *sym as _);
+                        *self.reg_mut(left)? = sym.map_or(0, |sym| *sym as usize);
                     }
                 }
                 OpCode::Syscall => {

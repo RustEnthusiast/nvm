@@ -10,6 +10,7 @@
     clippy::suspicious
 )]
 #![allow(
+    clippy::absolute_paths,
     clippy::as_conversions,
     clippy::as_underscore,
     clippy::blanket_clippy_restriction_lints,
