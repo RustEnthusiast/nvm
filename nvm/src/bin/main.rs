@@ -20,6 +20,8 @@
     clippy::min_ident_chars,
     clippy::missing_inline_in_public_items,
     clippy::mod_module_files,
+    clippy::panic,
+    clippy::panic_in_result_fn,
     clippy::question_mark_used,
     clippy::semicolon_inside_block,
     clippy::semicolon_outside_block,

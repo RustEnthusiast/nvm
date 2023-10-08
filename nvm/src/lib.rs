@@ -920,7 +920,10 @@ impl VM {
                         };
                         let ret = addr_of_mut!(*ret).cast();
                         // SAFETY: `usize` to function pointer transmute.
-                        let f = unsafe { Some(std::mem::transmute(left)) };
+                        let f = match left {
+                            0 => None,
+                            _ => unsafe { Some(std::mem::transmute(left)) },
+                        };
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         unsafe {
                             libffi::raw::ffi_call(cif.as_mut_ptr(), f, ret, args.as_mut_ptr());
