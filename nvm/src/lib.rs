@@ -225,16 +225,18 @@ enum Flags {
     Sign = 1 << 3,
 }
 
-/// Computes a checked addition operation on a [usize].
-#[inline]
-fn checked_add(x: usize, y: usize) -> Result<usize, NvmError> {
-    x.checked_add(y).ok_or(NvmError::OverflowError)
+/// Computes a checked addition operation on a value.
+macro_rules! checked_add {
+    ($x: expr, $y: expr) => {
+        $x.checked_add($y).ok_or(NvmError::OverflowError)
+    };
 }
 
-/// Computes a checked subtraction operation on a [usize].
-#[inline]
-fn checked_sub(x: usize, y: usize) -> Result<usize, NvmError> {
-    x.checked_sub(y).ok_or(NvmError::OverflowError)
+/// Computes a checked subtraction operation on a value.
+macro_rules! checked_sub {
+    ($x: expr, $y: expr) => {
+        $x.checked_sub($y).ok_or(NvmError::OverflowError)
+    };
 }
 
 /// The NVM virtual machine.
@@ -316,14 +318,14 @@ impl VM {
         value: &T,
     ) -> Result<(), NvmError> {
         memory.write(self.sp(), value)?;
-        *self.sp_mut() = checked_add(self.sp(), core::mem::size_of::<T>())?;
+        *self.sp_mut() = checked_add!(self.sp(), core::mem::size_of::<T>())?;
         Ok(())
     }
 
     /// Pops a value off of the virtual stack.
     #[inline]
     fn pop<T: Copy>(&mut self, memory: &impl MemoryDriver) -> Result<T, NvmError> {
-        *self.sp_mut() = checked_sub(self.sp(), core::mem::size_of::<T>())?;
+        *self.sp_mut() = checked_sub!(self.sp(), core::mem::size_of::<T>())?;
         memory.read(self.sp())
     }
 
@@ -340,37 +342,37 @@ impl VM {
             let mut ip = self.ip();
             let op = memory.read::<u8>(ip)?;
             let opcode = OpCode::from_u8(op).ok_or(NvmError::InvalidOperation(op))?;
-            *self.ip_mut() = checked_add(ip, opcode.size())?;
+            *self.ip_mut() = checked_add!(ip, opcode.size())?;
             match opcode {
                 OpCode::Exit => {
-                    return self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?);
+                    return self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?);
                 }
                 OpCode::Nop => {}
                 OpCode::Move => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let right = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     *self.reg_mut(left)? = self.reg(right)?;
                 }
                 OpCode::MoveConst => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let r = self.reg_mut(memory.read::<u8>(ip)?.try_into()?)?;
-                    *r = memory.read::<usize>(checked_add(ip, 1)?)?;
+                    *r = memory.read::<usize>(checked_add!(ip, 1)?)?;
                 }
                 OpCode::Load => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let right = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     *self.reg_mut(left)? = memory.read(self.reg(right)?)?;
                 }
                 OpCode::LoadNum => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let right = memory.read::<u8>(ip)?.try_into()?;
-                    let n = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let n = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     let pos = self.reg(right)?;
-                    let Some(mem) = memory.buffer().get(pos..checked_add(pos, n)?) else {
+                    let Some(mem) = memory.buffer().get(pos..checked_add!(pos, n)?) else {
                         return Err(NvmError::MemoryReadError { pos, len: n });
                     };
                     let r = self.reg_mut(left)?;
@@ -378,57 +380,57 @@ impl VM {
                     let bytes = bytemuck::bytes_of_mut(r);
                     let bytes = match cfg!(target_endian = "little") {
                         true => bytes.get_mut(..n),
-                        false => bytes.get_mut(checked_sub(bytes.len(), n)?..),
+                        false => bytes.get_mut(checked_sub!(bytes.len(), n)?..),
                     }
                     .ok_or(NvmError::RegisterWriteError)?;
                     bytes.copy_from_slice(mem);
                 }
                 OpCode::Store => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let right = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     memory.write(self.reg(left)?, &self.reg(right)?)?;
                 }
                 OpCode::StoreNum => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let right = memory.read::<u8>(ip)?.try_into()?;
-                    let n = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let n = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     let bytes = self.reg(right)?.to_ne_bytes();
                     let bytes = match cfg!(target_endian = "little") {
                         true => bytes.get(..n),
-                        false => bytes.get(checked_sub(bytes.len(), n)?..),
+                        false => bytes.get(checked_sub!(bytes.len(), n)?..),
                     }
                     .ok_or(NvmError::RegisterReadError)?;
                     memory.write_bytes(self.reg(left)?, bytes)?;
                 }
                 OpCode::Push => {
-                    let r = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let r = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     self.push(memory, &self.reg(r)?)?;
                 }
                 OpCode::PushNum => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let r = memory.read::<u8>(ip)?.try_into()?;
-                    let n = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let n = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     let bytes = self.reg(r)?.to_ne_bytes();
                     let bytes = match cfg!(target_endian = "little") {
                         true => bytes.get(..n),
-                        false => bytes.get(checked_sub(bytes.len(), n)?..),
+                        false => bytes.get(checked_sub!(bytes.len(), n)?..),
                     }
                     .ok_or(NvmError::RegisterReadError)?;
                     memory.write_bytes(self.sp(), bytes)?;
-                    *self.sp_mut() = checked_add(self.sp(), n)?;
+                    *self.sp_mut() = checked_add!(self.sp(), n)?;
                 }
                 OpCode::Pop => {
-                    let r = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let r = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     *self.reg_mut(r)? = self.pop(memory)?;
                 }
                 OpCode::PopNum => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let n = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
-                    let pos = checked_sub(self.sp(), n)?;
+                    let n = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
+                    let pos = checked_sub!(self.sp(), n)?;
                     let Some(mem) = memory.buffer().get(pos..self.sp()) else {
                         return Err(NvmError::MemoryReadError { pos, len: n });
                     };
@@ -437,14 +439,14 @@ impl VM {
                     let bytes = bytemuck::bytes_of_mut(r);
                     let bytes = match cfg!(target_endian = "little") {
                         true => bytes.get_mut(..n),
-                        false => bytes.get_mut(checked_sub(bytes.len(), n)?..),
+                        false => bytes.get_mut(checked_sub!(bytes.len(), n)?..),
                     }
                     .ok_or(NvmError::RegisterWriteError)?;
                     bytes.copy_from_slice(mem);
-                    *self.sp_mut() = checked_sub(self.sp(), n)?;
+                    *self.sp_mut() = checked_sub!(self.sp(), n)?;
                 }
                 OpCode::Neg => {
-                    let r = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                    let r = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     #[allow(clippy::cast_possible_wrap)]
                     let (n, o) = (self.reg(r)? as isize).overflowing_neg();
                     match o {
@@ -467,9 +469,9 @@ impl VM {
                     }
                 }
                 OpCode::Add => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     let (add, c) = self.reg(left)?.overflowing_add(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -482,9 +484,9 @@ impl VM {
                     *self.reg_mut(left)? = add;
                 }
                 OpCode::AddI => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     #[allow(clippy::cast_possible_wrap)]
                     let (add, o) = (self.reg(left)? as isize).overflowing_add(right as isize);
                     match o {
@@ -507,9 +509,9 @@ impl VM {
                     }
                 }
                 OpCode::Sub => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     let (sub, c) = self.reg(left)?.overflowing_sub(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -522,9 +524,9 @@ impl VM {
                     *self.reg_mut(left)? = sub;
                 }
                 OpCode::SubI => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     #[allow(clippy::cast_possible_wrap)]
                     let (sub, o) = (self.reg(left)? as isize).overflowing_sub(right as isize);
                     match o {
@@ -547,9 +549,9 @@ impl VM {
                     }
                 }
                 OpCode::Mul => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     let (mul, c) = self.reg(left)?.overflowing_mul(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -562,9 +564,9 @@ impl VM {
                     *self.reg_mut(left)? = mul;
                 }
                 OpCode::MulI => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     #[allow(clippy::cast_possible_wrap)]
                     let (mul, o) = (self.reg(left)? as isize).overflowing_mul(right as isize);
                     match o {
@@ -587,9 +589,9 @@ impl VM {
                     }
                 }
                 OpCode::Div => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     let (div, c) = self.reg(left)?.overflowing_div(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -602,9 +604,9 @@ impl VM {
                     *self.reg_mut(left)? = div;
                 }
                 OpCode::DivI => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     #[allow(clippy::cast_possible_wrap)]
                     let (div, o) = (self.reg(left)? as isize).overflowing_div(right as isize);
                     match o {
@@ -627,48 +629,48 @@ impl VM {
                     }
                 }
                 OpCode::Not => {
-                    let r = self.reg_mut(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let r = self.reg_mut(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     *r = !*r;
                 }
                 OpCode::And => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? &= right;
                 }
                 OpCode::Or => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? |= right;
                 }
                 OpCode::Xor => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? ^= right;
                 }
                 OpCode::Shl => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? <<= right;
                 }
                 OpCode::Shr => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = memory.read::<u8>(ip)?.try_into()?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     *self.reg_mut(left)? >>= right;
                 }
                 OpCode::Call => {
                     self.push(memory, &self.ip())?;
-                    *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                    *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                 }
                 OpCode::Return => *self.ip_mut() = self.pop(memory)?,
                 OpCode::Cmp => {
-                    ip = checked_add(ip, 1)?;
+                    ip = checked_add!(ip, 1)?;
                     let left = self.reg(memory.read::<u8>(ip)?.try_into()?)?;
-                    let right = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                    let right = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                     let (_, c) = left.overflowing_sub(right);
                     match c {
                         true => *self.flags_mut() |= Flags::Carry as usize,
@@ -691,59 +693,59 @@ impl VM {
                         }
                     }
                 }
-                OpCode::Jump => *self.ip_mut() = memory.read(checked_add(ip, 1)?)?,
+                OpCode::Jump => *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?,
                 OpCode::JZ | OpCode::JE => {
                     if (self.flags() & (Flags::Zero as usize)) != 0 {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JNZ | OpCode::JNE => {
                     if (self.flags() & (Flags::Zero as usize)) == 0 {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JC | OpCode::JB => {
                     if (self.flags() & (Flags::Carry as usize)) != 0 {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JNC | OpCode::JAE => {
                     if (self.flags() & (Flags::Carry as usize)) == 0 {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JO => {
                     if (self.flags() & (Flags::Overflow as usize)) != 0 {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JNO => {
                     if (self.flags() & (Flags::Overflow as usize)) == 0 {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JS => {
                     if (self.flags() & (Flags::Sign as usize)) != 0 {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JNS => {
                     if (self.flags() & (Flags::Sign as usize)) == 0 {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JA => {
                     if (self.flags() & (Flags::Zero as usize)) == 0
                         && (self.flags() & (Flags::Carry as usize)) == 0
                     {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JBE => {
                     if (self.flags() & (Flags::Zero as usize)) != 0
                         || (self.flags() & (Flags::Carry as usize)) != 0
                     {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JG => {
@@ -751,21 +753,21 @@ impl VM {
                         && (((self.flags() & (Flags::Sign as usize)) == 0)
                             == ((self.flags() & (Flags::Overflow as usize)) == 0))
                     {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JGE => {
                     if ((self.flags() & (Flags::Sign as usize)) == 0)
                         == ((self.flags() & (Flags::Overflow as usize)) == 0)
                     {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JL => {
                     if ((self.flags() & (Flags::Sign as usize)) == 0)
                         != ((self.flags() & (Flags::Overflow as usize)) == 0)
                     {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JLE => {
@@ -773,13 +775,13 @@ impl VM {
                         || (((self.flags() & (Flags::Sign as usize)) == 0)
                             != ((self.flags() & (Flags::Overflow as usize)) == 0))
                     {
-                        *self.ip_mut() = memory.read(checked_add(ip, 1)?)?;
+                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::LoadLib => {
                     #[cfg(feature = "std")]
                     {
-                        let r = memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?;
+                        let r = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                         let pos = self.reg(r)?;
                         let name = memory
                             .buffer()
@@ -811,10 +813,10 @@ impl VM {
                 OpCode::LoadSym => {
                     #[cfg(feature = "std")]
                     {
-                        ip = checked_add(ip, 1)?;
+                        ip = checked_add!(ip, 1)?;
                         let left = memory.read::<u8>(ip)?.try_into()?;
                         let right =
-                            self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                            self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         let lib = unsafe { &*(right as *const Library) };
                         let pos = self.reg(left)?;
@@ -870,10 +872,10 @@ impl VM {
                                 ty => Err(NvmError::FfiTypeError(ty)),
                             }
                         }
-                        ip = checked_add(ip, 1)?;
+                        ip = checked_add!(ip, 1)?;
                         let left = self.reg(memory.read::<u8>(ip)?.try_into()?)?;
                         let right =
-                            self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                            self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                         #[allow(clippy::collection_is_never_read)]
                         let mut types = Vec::with_capacity(right);
                         let mut raw_types = Vec::with_capacity(right);
@@ -903,7 +905,7 @@ impl VM {
                         for ty in &raw_types {
                             // SAFETY: `ty` is pointing to a valid `ffi_type`.
                             let arg_size = unsafe { (**ty).size };
-                            *self.sp_mut() = checked_sub(self.sp(), arg_size)?;
+                            *self.sp_mut() = checked_sub!(self.sp(), arg_size)?;
                             let Some(byte) = memory.buffer_mut().get_mut(self.sp()) else {
                                 return Err(NvmError::MemoryReadError {
                                     pos: self.sp(),
@@ -912,7 +914,7 @@ impl VM {
                             };
                             args.push(addr_of_mut!(*byte).cast());
                         }
-                        let ret_addr = checked_sub(self.sp(), ret_size)?;
+                        let ret_addr = checked_sub!(self.sp(), ret_size)?;
                         let Some(ret) = memory.buffer_mut().get_mut(ret_addr) else {
                             return Err(NvmError::MemoryWriteError {
                                 pos: ret_addr,
@@ -934,7 +936,7 @@ impl VM {
                 OpCode::FreeLib => {
                     #[cfg(feature = "std")]
                     {
-                        let r = self.reg(memory.read::<u8>(checked_add(ip, 1)?)?.try_into()?)?;
+                        let r = self.reg(memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?)?;
                         // SAFETY: The safety of this operation is documented by it's `Op`.
                         unsafe { drop(Box::from_raw(r as *mut Library)) };
                     }
