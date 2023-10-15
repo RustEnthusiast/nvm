@@ -1,4 +1,5 @@
 //! Represents an NVM operation code.
+use crate::UInt;
 use num_derive::FromPrimitive;
 
 /// Represents an NVM operation code.
@@ -548,8 +549,8 @@ impl OpCode {
             | Self::JG
             | Self::JGE
             | Self::JL
-            | Self::JLE => 1 + core::mem::size_of::<usize>(),
-            Self::MoveConst => 2 + core::mem::size_of::<usize>(),
+            | Self::JLE => 1 + core::mem::size_of::<UInt>(),
+            Self::MoveConst => 2 + core::mem::size_of::<UInt>(),
         }
     }
 }

@@ -28,17 +28,21 @@
     clippy::shadow_reuse,
     clippy::shadow_unrelated,
     clippy::single_call_fn,
-    clippy::std_instead_of_core
+    clippy::std_instead_of_core,
+    clippy::useless_conversion
 )]
 mod memory;
 use self::memory::Memory;
 use nvm::{NvmError, VM};
-use std::{io::Error as IoError, num::TryFromIntError};
+use std::{convert::Infallible, io::Error as IoError, num::TryFromIntError};
 use thiserror::Error;
 
 /// Describes an error returned from the NVM binary.
 #[derive(Debug, Error)]
 pub enum ProgramError {
+    /// An error that can never occur.
+    #[error(transparent)]
+    Infallible(#[from] Infallible),
     /// An I/O operation failed.
     #[error(transparent)]
     IoError(#[from] IoError),

@@ -1,15 +1,126 @@
-use crate::lexer::{Token, TokenType};
+use crate::{
+    lexer::{Token, TokenType},
+    Bits,
+};
 use ariadne::Color;
-use nvm::opcode::OpCode;
 use std::{collections::HashMap, num::ParseIntError, slice::Iter, str::FromStr};
+
+/// An unsigned integer.
+#[derive(Clone, Copy)]
+pub(super) enum UInt {
+    /// An unsigned host-native-bit integer.
+    USize(usize),
+    /// An unsigned 8-bit integer.
+    U8(u8),
+    /// An unsigned 16-bit integer.
+    U16(u16),
+    /// An unsigned 32-bit integer.
+    U32(u32),
+    /// An unsigned 64-bit integer.
+    U64(u64),
+    /// An unsigned 128-bit integer.
+    U128(u128),
+}
+impl UInt {
+    /// Converts a [`u128`] into a [`UInt`] based on `bits`.
+    fn from_u128(n: u128, bits: Bits) -> Self {
+        match bits {
+            Bits::BitNative => Self::USize(n as _),
+            Bits::Bit8 => Self::U8(n as _),
+            Bits::Bit16 => Self::U16(n as _),
+            Bits::Bit32 => Self::U32(n as _),
+            Bits::Bit64 => Self::U64(n as _),
+            Bits::Bit128 => Self::U128(n),
+        }
+    }
+
+    /// Converts a string slice into a [`UInt`] based on `bits`.
+    fn from_str(str: &str, bits: Bits) -> Result<Self, ParseIntError> {
+        match bits {
+            Bits::BitNative => Ok(Self::USize(str.parse()?)),
+            Bits::Bit8 => Ok(Self::U8(str.parse()?)),
+            Bits::Bit16 => Ok(Self::U16(str.parse()?)),
+            Bits::Bit32 => Ok(Self::U32(str.parse()?)),
+            Bits::Bit64 => Ok(Self::U64(str.parse()?)),
+            Bits::Bit128 => Ok(Self::U128(str.parse()?)),
+        }
+    }
+
+    /// Returns the byte representation of this integer.
+    pub(super) fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::USize(n) => bytemuck::bytes_of(n),
+            Self::U8(n) => bytemuck::bytes_of(n),
+            Self::U16(n) => bytemuck::bytes_of(n),
+            Self::U32(n) => bytemuck::bytes_of(n),
+            Self::U64(n) => bytemuck::bytes_of(n),
+            Self::U128(n) => bytemuck::bytes_of(n),
+        }
+    }
+}
+impl From<Int> for UInt {
+    /// Converts an [`Int`] into a [`UInt`].
+    fn from(value: Int) -> Self {
+        match value {
+            Int::ISize(n) => Self::USize(n as _),
+            Int::I8(n) => Self::U8(n as _),
+            Int::I16(n) => Self::U16(n as _),
+            Int::I32(n) => Self::U32(n as _),
+            Int::I64(n) => Self::U64(n as _),
+            Int::I128(n) => Self::U128(n as _),
+        }
+    }
+}
+
+/// A signed integer.
+#[derive(Clone, Copy)]
+pub(super) enum Int {
+    /// A signed host-native-bit integer.
+    ISize(isize),
+    /// A signed 8-bit integer.
+    I8(i8),
+    /// A signed 16-bit integer.
+    I16(i16),
+    /// A signed 32-bit integer.
+    I32(i32),
+    /// A signed 64-bit integer.
+    I64(i64),
+    /// A signed 128-bit integer.
+    I128(i128),
+}
+impl Int {
+    /// Converts a string slice into an [`Int`] based on `bits`.
+    fn from_str(str: &str, bits: Bits) -> Result<Self, ParseIntError> {
+        match bits {
+            Bits::BitNative => Ok(Self::ISize(str.parse()?)),
+            Bits::Bit8 => Ok(Self::I8(str.parse()?)),
+            Bits::Bit16 => Ok(Self::I16(str.parse()?)),
+            Bits::Bit32 => Ok(Self::I32(str.parse()?)),
+            Bits::Bit64 => Ok(Self::I64(str.parse()?)),
+            Bits::Bit128 => Ok(Self::I128(str.parse()?)),
+        }
+    }
+
+    /// Returns the byte representation of this integer.
+    pub(super) fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::ISize(n) => bytemuck::bytes_of(n),
+            Self::I8(n) => bytemuck::bytes_of(n),
+            Self::I16(n) => bytemuck::bytes_of(n),
+            Self::I32(n) => bytemuck::bytes_of(n),
+            Self::I64(n) => bytemuck::bytes_of(n),
+            Self::I128(n) => bytemuck::bytes_of(n),
+        }
+    }
+}
 
 /// Describes an NVM register constant.
 #[derive(Clone, Copy)]
 pub(super) enum RegConst<'tok> {
     /// An unsigned pointer-sized numeric constant.
-    UInt(usize),
+    UInt(UInt),
     /// A signed pointer-sized numeric constant.
-    Int(isize),
+    Int(Int),
     /// An identifier for a module location.
     Ident(&'tok str),
 }
@@ -125,61 +236,59 @@ pub(super) enum Instruction<'tok> {
 }
 impl Instruction<'_> {
     /// Gets the instruction's size.
-    const fn size(&self) -> usize {
+    const fn size(&self, bits: Bits) -> usize {
         match self {
-            Instruction::Exit(_) => OpCode::Exit.size(),
-            Instruction::Nop => OpCode::Nop.size(),
-            Instruction::Move(_, _) => OpCode::Move.size(),
-            Instruction::MoveConst(_, _) => OpCode::MoveConst.size(),
-            Instruction::Load(_, _) => OpCode::Load.size(),
-            Instruction::LoadNum(_, _, _) => OpCode::LoadNum.size(),
-            Instruction::Store(_, _) => OpCode::Store.size(),
-            Instruction::StoreNum(_, _, _) => OpCode::StoreNum.size(),
-            Instruction::Push(_) => OpCode::Push.size(),
-            Instruction::PushNum(_, _) => OpCode::PushNum.size(),
-            Instruction::Pop(_) => OpCode::Pop.size(),
-            Instruction::PopNum(_, _) => OpCode::PopNum.size(),
-            Instruction::Neg(_) => OpCode::Neg.size(),
-            Instruction::Add(_, _) => OpCode::Add.size(),
-            Instruction::AddI(_, _) => OpCode::AddI.size(),
-            Instruction::Sub(_, _) => OpCode::Sub.size(),
-            Instruction::SubI(_, _) => OpCode::SubI.size(),
-            Instruction::Mul(_, _) => OpCode::Mul.size(),
-            Instruction::MulI(_, _) => OpCode::MulI.size(),
-            Instruction::Div(_, _) => OpCode::Div.size(),
-            Instruction::DivI(_, _) => OpCode::DivI.size(),
-            Instruction::Not(_) => OpCode::Not.size(),
-            Instruction::And(_, _) => OpCode::And.size(),
-            Instruction::Or(_, _) => OpCode::Or.size(),
-            Instruction::Xor(_, _) => OpCode::Xor.size(),
-            Instruction::Shl(_, _) => OpCode::Shl.size(),
-            Instruction::Shr(_, _) => OpCode::Shr.size(),
-            Instruction::Call(_) => OpCode::Call.size(),
-            Instruction::Return => OpCode::Return.size(),
-            Instruction::Cmp(_, _) => OpCode::Cmp.size(),
-            Instruction::Jump(_) => OpCode::Jump.size(),
-            Instruction::JZ(_) => OpCode::JZ.size(),
-            Instruction::JNZ(_) => OpCode::JNZ.size(),
-            Instruction::JO(_) => OpCode::JO.size(),
-            Instruction::JNO(_) => OpCode::JNO.size(),
-            Instruction::JC(_) => OpCode::JC.size(),
-            Instruction::JNC(_) => OpCode::JNC.size(),
-            Instruction::JS(_) => OpCode::JS.size(),
-            Instruction::JNS(_) => OpCode::JNS.size(),
-            Instruction::JE(_) => OpCode::JE.size(),
-            Instruction::JNE(_) => OpCode::JNE.size(),
-            Instruction::JA(_) => OpCode::JA.size(),
-            Instruction::JAE(_) => OpCode::JAE.size(),
-            Instruction::JB(_) => OpCode::JB.size(),
-            Instruction::JBE(_) => OpCode::JBE.size(),
-            Instruction::JG(_) => OpCode::JG.size(),
-            Instruction::JGE(_) => OpCode::JGE.size(),
-            Instruction::JL(_) => OpCode::JL.size(),
-            Instruction::JLE(_) => OpCode::JLE.size(),
-            Instruction::LoadLib(_) => OpCode::LoadLib.size(),
-            Instruction::LoadSym(_, _) => OpCode::LoadSym.size(),
-            Instruction::Syscall(_, _) => OpCode::Syscall.size(),
-            Instruction::FreeLib(_) => OpCode::FreeLib.size(),
+            Self::Nop | Self::Return => 1,
+            Self::Exit(_)
+            | Self::Push(_)
+            | Self::Pop(_)
+            | Self::Neg(_)
+            | Self::Not(_)
+            | Self::LoadLib(_)
+            | Self::FreeLib(_) => 2,
+            Self::Move(_, _)
+            | Self::Load(_, _)
+            | Self::Store(_, _)
+            | Self::PushNum(_, _)
+            | Self::PopNum(_, _)
+            | Self::Add(_, _)
+            | Self::AddI(_, _)
+            | Self::Sub(_, _)
+            | Self::SubI(_, _)
+            | Self::Mul(_, _)
+            | Self::MulI(_, _)
+            | Self::Div(_, _)
+            | Self::DivI(_, _)
+            | Self::And(_, _)
+            | Self::Or(_, _)
+            | Self::Xor(_, _)
+            | Self::Shl(_, _)
+            | Self::Shr(_, _)
+            | Self::Cmp(_, _)
+            | Self::LoadSym(_, _)
+            | Self::Syscall(_, _) => 3,
+            Self::LoadNum(_, _, _) | Self::StoreNum(_, _, _) => 4,
+            Self::Call(_)
+            | Self::Jump(_)
+            | Self::JZ(_)
+            | Self::JNZ(_)
+            | Self::JO(_)
+            | Self::JNO(_)
+            | Self::JC(_)
+            | Self::JNC(_)
+            | Self::JS(_)
+            | Self::JNS(_)
+            | Self::JE(_)
+            | Self::JNE(_)
+            | Self::JA(_)
+            | Self::JAE(_)
+            | Self::JB(_)
+            | Self::JBE(_)
+            | Self::JG(_)
+            | Self::JGE(_)
+            | Self::JL(_)
+            | Self::JLE(_) => 1 + bits.size(),
+            Self::MoveConst(_, _) => 2 + bits.size(),
         }
     }
 }
@@ -187,9 +296,9 @@ impl Instruction<'_> {
 /// Describes a static item.
 pub(super) enum Static {
     /// An unsigned pointer-sized numeric constant.
-    UInt(usize),
+    UInt(UInt),
     /// A signed pointer-sized numeric constant.
-    Int(isize),
+    Int(Int),
     /// An unsigned 8-bit numeric constant.
     U8(u8),
     /// A signed 8-bit numeric constant.
@@ -304,6 +413,7 @@ fn assert_reg_const<'tok>(
     token: &Token,
     tokens: &mut Iter<Token>,
     const_token: &'tok Token,
+    bits: Bits,
 ) -> Result<RegConst<'tok>, ParseIntError> {
     match const_token.ty() {
         TokenType::Punct if const_token.tok() == "-" => {
@@ -312,11 +422,12 @@ fn assert_reg_const<'tok>(
                 let n_pos = num_token.loc().byte_pos();
                 if num_token.ty() == TokenType::Num && n_pos == sign_pos + 1 {
                     let n_len = num_token.tok().len();
-                    return Ok(RegConst::Int(src[sign_pos..n_pos + n_len].parse()?));
+                    let tok = &src[sign_pos..n_pos + n_len];
+                    return Ok(RegConst::Int(Int::from_str(tok, bits)?));
                 }
             }
         }
-        TokenType::Num => return Ok(RegConst::UInt(const_token.tok().parse()?)),
+        TokenType::Num => return Ok(RegConst::UInt(UInt::from_str(&const_token.tok(), bits)?)),
         TokenType::Ident => return Ok(RegConst::Ident(const_token.tok())),
         _ => {}
     }
@@ -336,9 +447,10 @@ fn next_reg_const<'tok>(
     src: &str,
     op_token: &Token,
     tokens: &mut Iter<'tok, Token>,
+    bits: Bits,
 ) -> Result<RegConst<'tok>, ParseIntError> {
     match tokens.next() {
-        Some(const_token) => assert_reg_const(filename, src, op_token, tokens, const_token),
+        Some(const_token) => assert_reg_const(filename, src, op_token, tokens, const_token, bits),
         _ => crate::grim_error(
             (filename, src, op_token.loc().byte_pos()),
             "Expected a constant or an identifier as an instruction operand.",
@@ -381,6 +493,7 @@ fn next_instruction<'tok>(
     src: &str,
     token: &'tok Token,
     tokens: &mut Iter<'tok, Token>,
+    bits: Bits,
 ) -> Result<Result<Instruction<'tok>, &'tok str>, ParseIntError> {
     match token.tok() {
         "exit" => {
@@ -397,7 +510,7 @@ fn next_instruction<'tok>(
         "movec" => {
             let (r, reg_tok) = next_reg_ident(filename, src, token, tokens);
             next_op_separator(filename, src, reg_tok, tokens);
-            let const_tok = next_reg_const(filename, src, token, tokens)?;
+            let const_tok = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::MoveConst(r, const_tok)))
         }
         "load" => {
@@ -535,7 +648,7 @@ fn next_instruction<'tok>(
             Ok(Ok(Instruction::Shr(r1, r2)))
         }
         "call" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::Call(n)))
         }
         "return" => Ok(Ok(Instruction::Return)),
@@ -546,79 +659,79 @@ fn next_instruction<'tok>(
             Ok(Ok(Instruction::Cmp(r1, r2)))
         }
         "jump" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::Jump(n)))
         }
         "jz" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JZ(n)))
         }
         "jnz" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JNZ(n)))
         }
         "jo" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JO(n)))
         }
         "jno" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JNO(n)))
         }
         "jc" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JC(n)))
         }
         "jnc" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JNC(n)))
         }
         "js" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JS(n)))
         }
         "jns" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JNS(n)))
         }
         "je" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JE(n)))
         }
         "jne" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JNE(n)))
         }
         "ja" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JA(n)))
         }
         "jae" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JAE(n)))
         }
         "jb" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JB(n)))
         }
         "jbe" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JBE(n)))
         }
         "jg" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JG(n)))
         }
         "jge" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JGE(n)))
         }
         "jl" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JL(n)))
         }
         "jle" => {
-            let n = next_reg_const(filename, src, token, tokens)?;
+            let n = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::JLE(n)))
         }
         "loadlib" => {
@@ -646,8 +759,8 @@ fn next_instruction<'tok>(
 }
 
 /// Adds a static item.
-fn add_static<T>(items: &mut Vec<Item>, loc: &mut usize, s: Static) {
-    *loc += core::mem::size_of::<T>();
+fn add_static<T>(items: &mut Vec<Item>, loc: &mut u128, s: Static) {
+    *loc += core::mem::size_of::<T>() as u128;
     items.push(Item::Static(s));
 }
 
@@ -656,19 +769,20 @@ pub(super) fn parse<'tok>(
     filename: &str,
     src: &str,
     mut tokens: Iter<'tok, Token>,
-) -> Result<(Vec<Item<'tok>>, HashMap<&'tok str, usize>), ParseIntError> {
+    bits: Bits,
+) -> Result<(Vec<Item<'tok>>, HashMap<&'tok str, UInt>), ParseIntError> {
     let mut items = Vec::new();
-    let mut loc = 0usize;
+    let mut loc = 0;
     let mut locations = HashMap::new();
     while let Some(token) = tokens.next() {
         match token.ty() {
-            TokenType::Ident => match next_instruction(filename, src, token, &mut tokens)? {
+            TokenType::Ident => match next_instruction(filename, src, token, &mut tokens, bits)? {
                 Ok(instruction) => {
-                    loc += instruction.size();
+                    loc += instruction.size(bits) as u128;
                     items.push(Item::Instruction(instruction));
                 }
                 Err(ident) => {
-                    locations.insert(ident, loc);
+                    locations.insert(ident, UInt::from_u128(loc, bits));
                 }
             },
             TokenType::Punct if token.tok() == "-" => {
@@ -682,8 +796,10 @@ pub(super) fn parse<'tok>(
                             if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + n_len {
                                 match ty_tok.tok() {
                                     "int" => {
-                                        let s = Static::Int(src[sign_pos..n_pos + n_len].parse()?);
-                                        add_static::<isize>(&mut items, &mut loc, s);
+                                        let tok = &src[sign_pos..n_pos + n_len];
+                                        let s = Static::Int(Int::from_str(tok, bits)?);
+                                        loc += bits.size() as u128;
+                                        items.push(Item::Static(s));
                                         continue;
                                     }
                                     "i8" => {
@@ -737,13 +853,15 @@ pub(super) fn parse<'tok>(
                     if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + n_len {
                         match ty_tok.tok() {
                             "uint" => {
-                                let s = Static::UInt(token.tok().parse()?);
-                                add_static::<usize>(&mut items, &mut loc, s);
+                                let s = Static::UInt(UInt::from_str(token.tok(), bits)?);
+                                loc += bits.size() as u128;
+                                items.push(Item::Static(s));
                                 continue;
                             }
                             "int" => {
-                                let s = Static::Int(token.tok().parse()?);
-                                add_static::<isize>(&mut items, &mut loc, s);
+                                let s = Static::Int(Int::from_str(token.tok(), bits)?);
+                                loc += bits.size() as u128;
+                                items.push(Item::Static(s));
                                 continue;
                             }
                             "u8" => {
@@ -814,7 +932,7 @@ pub(super) fn parse<'tok>(
                         s.push(c);
                     }
                 }
-                loc += s.len();
+                loc += s.len() as u128;
                 items.push(Item::Static(Static::String(s)));
             }
             _ => crate::grim_error(
