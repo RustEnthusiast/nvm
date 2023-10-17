@@ -9,6 +9,10 @@ name = "nvm"
 path = "src/bin/main.rs"
 required-features = ["bin"]
 
+[profile.release]
+lto = true
+strip = true
+
 [features]
 bin = ["build_const", "std"]
 std = ["libffi", "libloading", "thiserror"]

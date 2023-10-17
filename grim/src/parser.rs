@@ -5,6 +5,9 @@ use crate::{
 use ariadne::Color;
 use std::{collections::HashMap, num::ParseIntError, slice::Iter, str::FromStr};
 
+/// The largest unsigned integer allowed by Grim.
+type UMax = u128;
+
 /// An unsigned integer.
 #[derive(Clone, Copy)]
 pub(super) enum UInt {
@@ -22,15 +25,15 @@ pub(super) enum UInt {
     U128(u128),
 }
 impl UInt {
-    /// Converts a [`u128`] into a [`UInt`] based on `bits`.
-    fn from_u128(n: u128, bits: Bits) -> Self {
+    /// Converts a [`UMax`] into a [`UInt`] based on `bits`.
+    fn from_umax(n: UMax, bits: Bits) -> Self {
         match bits {
             Bits::BitNative => Self::USize(n as _),
             Bits::Bit8 => Self::U8(n as _),
             Bits::Bit16 => Self::U16(n as _),
             Bits::Bit32 => Self::U32(n as _),
             Bits::Bit64 => Self::U64(n as _),
-            Bits::Bit128 => Self::U128(n),
+            Bits::Bit128 => Self::U128(n as _),
         }
     }
 
@@ -299,22 +302,6 @@ pub(super) enum Static {
     UInt(UInt),
     /// A signed pointer-sized numeric constant.
     Int(Int),
-    /// An unsigned 8-bit numeric constant.
-    U8(u8),
-    /// A signed 8-bit numeric constant.
-    I8(i8),
-    /// An unsigned 16-bit numeric constant.
-    U16(u16),
-    /// A signed 16-bit numeric constant.
-    I16(i16),
-    /// An unsigned 32-bit numeric constant.
-    U32(u32),
-    /// A signed 32-bit numeric constant.
-    I32(i32),
-    /// An unsigned 64-bit numeric constant.
-    U64(u64),
-    /// A signed 64-bit numeric constant.
-    I64(i64),
     /// A string literal.
     String(String),
 }
@@ -759,8 +746,8 @@ fn next_instruction<'tok>(
 }
 
 /// Adds a static item.
-fn add_static<T>(items: &mut Vec<Item>, loc: &mut u128, s: Static) {
-    *loc += core::mem::size_of::<T>() as u128;
+fn add_static<T>(items: &mut Vec<Item>, loc: &mut UMax, s: Static) {
+    *loc += core::mem::size_of::<T>() as UMax;
     items.push(Item::Static(s));
 }
 
@@ -778,11 +765,11 @@ pub(super) fn parse<'tok>(
         match token.ty() {
             TokenType::Ident => match next_instruction(filename, src, token, &mut tokens, bits)? {
                 Ok(instruction) => {
-                    loc += instruction.size(bits) as u128;
+                    loc += instruction.size(bits) as UMax;
                     items.push(Item::Instruction(instruction));
                 }
                 Err(ident) => {
-                    locations.insert(ident, UInt::from_u128(loc, bits));
+                    locations.insert(ident, UInt::from_umax(loc, bits));
                 }
             },
             TokenType::Punct if token.tok() == "-" => {
@@ -798,32 +785,43 @@ pub(super) fn parse<'tok>(
                                     "int" => {
                                         let tok = &src[sign_pos..n_pos + n_len];
                                         let s = Static::Int(Int::from_str(tok, bits)?);
-                                        loc += bits.size() as u128;
+                                        loc += bits.size() as UMax;
                                         items.push(Item::Static(s));
                                         continue;
                                     }
                                     "i8" => {
                                         let n_len = num_tok.tok().len();
-                                        let s = Static::I8(src[sign_pos..n_pos + n_len].parse()?);
+                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
+                                        let s = Static::Int(Int::I8(tok));
                                         add_static::<i8>(&mut items, &mut loc, s);
                                         continue;
                                     }
                                     "i16" => {
                                         let n_len = num_tok.tok().len();
-                                        let s = Static::I16(src[sign_pos..n_pos + n_len].parse()?);
+                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
+                                        let s = Static::Int(Int::I16(tok));
                                         add_static::<i16>(&mut items, &mut loc, s);
                                         continue;
                                     }
                                     "i32" => {
                                         let n_len = num_tok.tok().len();
-                                        let s = Static::I32(src[sign_pos..n_pos + n_len].parse()?);
+                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
+                                        let s = Static::Int(Int::I32(tok));
                                         add_static::<i32>(&mut items, &mut loc, s);
                                         continue;
                                     }
                                     "i64" => {
                                         let n_len = num_tok.tok().len();
-                                        let s = Static::I64(src[sign_pos..n_pos + n_len].parse()?);
+                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
+                                        let s = Static::Int(Int::I64(tok));
                                         add_static::<i64>(&mut items, &mut loc, s);
+                                        continue;
+                                    }
+                                    "i128" => {
+                                        let n_len = num_tok.tok().len();
+                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
+                                        let s = Static::Int(Int::I128(tok));
+                                        add_static::<i128>(&mut items, &mut loc, s);
                                         continue;
                                     }
                                     _ => {}
@@ -854,54 +852,64 @@ pub(super) fn parse<'tok>(
                         match ty_tok.tok() {
                             "uint" => {
                                 let s = Static::UInt(UInt::from_str(token.tok(), bits)?);
-                                loc += bits.size() as u128;
+                                loc += bits.size() as UMax;
                                 items.push(Item::Static(s));
                                 continue;
                             }
                             "int" => {
                                 let s = Static::Int(Int::from_str(token.tok(), bits)?);
-                                loc += bits.size() as u128;
+                                loc += bits.size() as UMax;
                                 items.push(Item::Static(s));
                                 continue;
                             }
                             "u8" => {
-                                let s = Static::U8(token.tok().parse()?);
+                                let s = Static::UInt(UInt::U8(token.tok().parse()?));
                                 add_static::<u8>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i8" => {
-                                let s = Static::I8(token.tok().parse()?);
+                                let s = Static::Int(Int::I8(token.tok().parse()?));
                                 add_static::<i8>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "u16" => {
-                                let s = Static::U16(token.tok().parse()?);
+                                let s = Static::UInt(UInt::U16(token.tok().parse()?));
                                 add_static::<u16>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i16" => {
-                                let s = Static::I16(token.tok().parse()?);
+                                let s = Static::Int(Int::I16(token.tok().parse()?));
                                 add_static::<i16>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "u32" => {
-                                let s = Static::U32(token.tok().parse()?);
+                                let s = Static::UInt(UInt::U32(token.tok().parse()?));
                                 add_static::<u32>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i32" => {
-                                let s = Static::I32(token.tok().parse()?);
+                                let s = Static::Int(Int::I32(token.tok().parse()?));
                                 add_static::<i32>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "u64" => {
-                                let s = Static::U64(token.tok().parse()?);
+                                let s = Static::UInt(UInt::U64(token.tok().parse()?));
                                 add_static::<u64>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i64" => {
-                                let s = Static::I64(token.tok().parse()?);
+                                let s = Static::Int(Int::I64(token.tok().parse()?));
                                 add_static::<i64>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "u128" => {
+                                let s = Static::UInt(UInt::U128(token.tok().parse()?));
+                                add_static::<u128>(&mut items, &mut loc, s);
+                                continue;
+                            }
+                            "i128" => {
+                                let s = Static::Int(Int::I128(token.tok().parse()?));
+                                add_static::<i128>(&mut items, &mut loc, s);
                                 continue;
                             }
                             _ => {}
@@ -932,7 +940,7 @@ pub(super) fn parse<'tok>(
                         s.push(c);
                     }
                 }
-                loc += s.len() as u128;
+                loc += s.len() as UMax;
                 items.push(Item::Static(Static::String(s)));
             }
             _ => crate::grim_error(

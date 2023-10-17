@@ -69,7 +69,7 @@ fn salvo_error<'id, LabelIter: IntoIterator<Item = Label<(&'id str, Range<usize>
         .finish()
         .eprint((file.0, Source::from(file.1)))
         .expect("failure to write to stderr");
-    std::process::abort();
+    std::process::exit(101);
 }
 
 /// Compiles Salvo source code.

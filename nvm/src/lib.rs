@@ -98,41 +98,31 @@ cfg_if! {
     if #[cfg(feature = "8bit")] {
         /// The virtual machine's unsigned word type.
         pub type UInt = u8;
-    } else if #[cfg(feature = "16bit")] {
-        /// The virtual machine's unsigned word type.
-        pub type UInt = u16;
-    } else if #[cfg(feature = "32bit")] {
-        /// The virtual machine's unsigned word type.
-        pub type UInt = u32;
-    } else if #[cfg(feature = "64bit")] {
-        /// The virtual machine's unsigned word type.
-        pub type UInt = u64;
-    } else if #[cfg(feature = "128bit")] {
-        /// The virtual machine's unsigned word type.
-        pub type UInt = u128;
-    } else {
-        /// The virtual machine's unsigned word type.
-        pub type UInt = usize;
-    }
-}
-
-cfg_if! {
-    if #[cfg(feature = "8bit")] {
         /// The virtual machine's signed word type.
         pub type Int = i8;
     } else if #[cfg(feature = "16bit")] {
+        /// The virtual machine's unsigned word type.
+        pub type UInt = u16;
         /// The virtual machine's signed word type.
         pub type Int = i16;
     } else if #[cfg(feature = "32bit")] {
+        /// The virtual machine's unsigned word type.
+        pub type UInt = u32;
         /// The virtual machine's signed word type.
         pub type Int = i32;
     } else if #[cfg(feature = "64bit")] {
+        /// The virtual machine's unsigned word type.
+        pub type UInt = u64;
         /// The virtual machine's signed word type.
         pub type Int = i64;
     } else if #[cfg(feature = "128bit")] {
+        /// The virtual machine's unsigned word type.
+        pub type UInt = u128;
         /// The virtual machine's signed word type.
         pub type Int = i128;
     } else {
+        /// The virtual machine's unsigned word type.
+        pub type UInt = usize;
         /// The virtual machine's signed word type.
         pub type Int = isize;
     }
