@@ -1,6 +1,77 @@
-use crate::parser::{Instruction, Item, RegConst, Static, UInt};
+use crate::{
+    parser::{Instruction, Int, Item, RegConst, Static, UInt},
+    Endianness,
+};
 use nvm::opcode::OpCode;
 use std::collections::HashMap;
+
+/// Describes a value that has endianness.
+trait HasEndianness {
+    /// Interprets this data as bytes based on `endianness`.
+    fn as_endian_bytes(&self, endianness: Endianness) -> Vec<u8>;
+}
+impl HasEndianness for UInt {
+    /// Interprets this data as bytes based on `endianness`.
+    fn as_endian_bytes(&self, endianness: Endianness) -> Vec<u8> {
+        match endianness {
+            Endianness::Native => match self {
+                Self::USize(n) => n.to_ne_bytes().into(),
+                Self::U8(n) => n.to_ne_bytes().into(),
+                Self::U16(n) => n.to_ne_bytes().into(),
+                Self::U32(n) => n.to_ne_bytes().into(),
+                Self::U64(n) => n.to_ne_bytes().into(),
+                Self::U128(n) => n.to_ne_bytes().into(),
+            },
+            Endianness::Little => match self {
+                Self::USize(n) => n.to_le_bytes().into(),
+                Self::U8(n) => n.to_le_bytes().into(),
+                Self::U16(n) => n.to_le_bytes().into(),
+                Self::U32(n) => n.to_le_bytes().into(),
+                Self::U64(n) => n.to_le_bytes().into(),
+                Self::U128(n) => n.to_le_bytes().into(),
+            },
+            Endianness::Big => match self {
+                Self::USize(n) => n.to_be_bytes().into(),
+                Self::U8(n) => n.to_be_bytes().into(),
+                Self::U16(n) => n.to_be_bytes().into(),
+                Self::U32(n) => n.to_be_bytes().into(),
+                Self::U64(n) => n.to_be_bytes().into(),
+                Self::U128(n) => n.to_be_bytes().into(),
+            },
+        }
+    }
+}
+impl HasEndianness for Int {
+    /// Interprets this data as bytes based on `endianness`.
+    fn as_endian_bytes(&self, endianness: Endianness) -> Vec<u8> {
+        match endianness {
+            Endianness::Native => match self {
+                Self::ISize(n) => n.to_ne_bytes().into(),
+                Self::I8(n) => n.to_ne_bytes().into(),
+                Self::I16(n) => n.to_ne_bytes().into(),
+                Self::I32(n) => n.to_ne_bytes().into(),
+                Self::I64(n) => n.to_ne_bytes().into(),
+                Self::I128(n) => n.to_ne_bytes().into(),
+            },
+            Endianness::Little => match self {
+                Self::ISize(n) => n.to_le_bytes().into(),
+                Self::I8(n) => n.to_le_bytes().into(),
+                Self::I16(n) => n.to_le_bytes().into(),
+                Self::I32(n) => n.to_le_bytes().into(),
+                Self::I64(n) => n.to_le_bytes().into(),
+                Self::I128(n) => n.to_le_bytes().into(),
+            },
+            Endianness::Big => match self {
+                Self::ISize(n) => n.to_be_bytes().into(),
+                Self::I8(n) => n.to_be_bytes().into(),
+                Self::I16(n) => n.to_be_bytes().into(),
+                Self::I32(n) => n.to_be_bytes().into(),
+                Self::I64(n) => n.to_be_bytes().into(),
+                Self::I128(n) => n.to_be_bytes().into(),
+            },
+        }
+    }
+}
 
 /// Gets a numeric constant or the location of an identifier.
 ///
@@ -22,12 +93,13 @@ fn get_reg_const(n: &RegConst, locations: &HashMap<&str, UInt>) -> UInt {
 pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
     items: I,
     locations: &HashMap<&str, UInt>,
+    endianness: Endianness,
 ) -> Vec<u8> {
     let mut bytes = Vec::new();
     for item in items {
         match item {
-            Item::Static(Static::UInt(n)) => bytes.extend(n.as_bytes()),
-            Item::Static(Static::Int(n)) => bytes.extend(n.as_bytes()),
+            Item::Static(Static::UInt(n)) => bytes.extend(n.as_endian_bytes(endianness)),
+            Item::Static(Static::Int(n)) => bytes.extend(n.as_endian_bytes(endianness)),
             Item::Static(Static::String(s)) => bytes.extend(s.as_bytes()),
             Item::Instruction(Instruction::Exit(r)) => bytes.extend([OpCode::Exit as _, r]),
             Item::Instruction(Instruction::Nop) => bytes.push(OpCode::Nop as _),
@@ -37,7 +109,7 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             Item::Instruction(Instruction::MoveConst(r, n)) => {
                 bytes.extend([OpCode::MoveConst as _, r]);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::Load(r1, r2)) => {
                 bytes.extend([OpCode::Load as _, r1, r2]);
@@ -85,104 +157,104 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             Item::Instruction(Instruction::Call(n)) => {
                 bytes.push(OpCode::Call as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::Return) => bytes.push(OpCode::Return as _),
             Item::Instruction(Instruction::Cmp(r1, r2)) => bytes.extend([OpCode::Cmp as _, r1, r2]),
             Item::Instruction(Instruction::Jump(n)) => {
                 bytes.push(OpCode::Jump as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JZ(n)) => {
                 bytes.push(OpCode::JZ as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JNZ(n)) => {
                 bytes.push(OpCode::JNZ as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JO(n)) => {
                 bytes.push(OpCode::JO as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JNO(n)) => {
                 bytes.push(OpCode::JNO as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JC(n)) => {
                 bytes.push(OpCode::JC as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JNC(n)) => {
                 bytes.push(OpCode::JNC as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JS(n)) => {
                 bytes.push(OpCode::JS as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JNS(n)) => {
                 bytes.push(OpCode::JNS as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JE(n)) => {
                 bytes.push(OpCode::JE as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JNE(n)) => {
                 bytes.push(OpCode::JNE as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JA(n)) => {
                 bytes.push(OpCode::JA as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JAE(n)) => {
                 bytes.push(OpCode::JAE as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JB(n)) => {
                 bytes.push(OpCode::JB as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JBE(n)) => {
                 bytes.push(OpCode::JBE as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JG(n)) => {
                 bytes.push(OpCode::JG as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JGE(n)) => {
                 bytes.push(OpCode::JGE as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JL(n)) => {
                 bytes.push(OpCode::JL as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::JLE(n)) => {
                 bytes.push(OpCode::JLE as _);
                 let n = get_reg_const(&n, locations);
-                bytes.extend(n.as_bytes());
+                bytes.extend(n.as_endian_bytes(endianness));
             }
             Item::Instruction(Instruction::LoadLib(r)) => bytes.extend([OpCode::LoadLib as _, r]),
             Item::Instruction(Instruction::LoadSym(r1, r2)) => {

@@ -48,18 +48,6 @@ impl UInt {
             Bits::Bit128 => Ok(Self::U128(str.parse()?)),
         }
     }
-
-    /// Returns the byte representation of this integer.
-    pub(super) fn as_bytes(&self) -> &[u8] {
-        match self {
-            Self::USize(n) => bytemuck::bytes_of(n),
-            Self::U8(n) => bytemuck::bytes_of(n),
-            Self::U16(n) => bytemuck::bytes_of(n),
-            Self::U32(n) => bytemuck::bytes_of(n),
-            Self::U64(n) => bytemuck::bytes_of(n),
-            Self::U128(n) => bytemuck::bytes_of(n),
-        }
-    }
 }
 impl From<Int> for UInt {
     /// Converts an [`Int`] into a [`UInt`].
@@ -101,18 +89,6 @@ impl Int {
             Bits::Bit32 => Ok(Self::I32(str.parse()?)),
             Bits::Bit64 => Ok(Self::I64(str.parse()?)),
             Bits::Bit128 => Ok(Self::I128(str.parse()?)),
-        }
-    }
-
-    /// Returns the byte representation of this integer.
-    pub(super) fn as_bytes(&self) -> &[u8] {
-        match self {
-            Self::ISize(n) => bytemuck::bytes_of(n),
-            Self::I8(n) => bytemuck::bytes_of(n),
-            Self::I16(n) => bytemuck::bytes_of(n),
-            Self::I32(n) => bytemuck::bytes_of(n),
-            Self::I64(n) => bytemuck::bytes_of(n),
-            Self::I128(n) => bytemuck::bytes_of(n),
         }
     }
 }

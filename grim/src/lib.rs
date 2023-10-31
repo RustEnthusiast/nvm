@@ -2,6 +2,7 @@ mod codegen;
 mod lexer;
 mod parser;
 use ariadne::{Label, Report, ReportKind, Source};
+use clap::ValueEnum;
 use core::{num::ParseIntError, ops::Range};
 
 /// An enumeration describing the target bit width.
@@ -35,11 +36,27 @@ impl Bits {
     }
 }
 
+/// The target VM's endianness.
+#[derive(Clone, Copy, ValueEnum)]
+pub enum Endianness {
+    /// Use the host's native endianness.
+    Native,
+    /// Little endian.
+    Little,
+    /// Big endian.
+    Big,
+}
+
 /// Assembles Grim source code.
-pub fn assemble(filename: &str, src: &str, bits: Bits) -> Result<Vec<u8>, ParseIntError> {
+pub fn assemble(
+    filename: &str,
+    src: &str,
+    bits: Bits,
+    endianness: Endianness,
+) -> Result<Vec<u8>, ParseIntError> {
     let tokens = lexer::lex(filename, src);
     let (items, locations) = parser::parse(filename, src, tokens.iter(), bits)?;
-    Ok(codegen::gen_bytecode(items, &locations))
+    Ok(codegen::gen_bytecode(items, &locations, endianness))
 }
 
 /// Reports an error and aborts.

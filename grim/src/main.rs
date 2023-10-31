@@ -1,5 +1,5 @@
 use clap::Parser;
-use grim::Bits;
+use grim::{Bits, Endianness};
 use std::{borrow::Cow, num::ParseIntError, path::PathBuf};
 
 /// An assembler written for the NVM virtual machine.
@@ -11,6 +11,9 @@ struct Cli {
     /// The target VM's bit-width.
     #[arg(long, default_value = "native")]
     bits: String,
+    /// The target machine's endianness.
+    #[arg(long, value_enum, default_value = "native")]
+    endianness: Endianness,
 }
 
 /// Main entry point of the program.
@@ -30,8 +33,8 @@ fn main() -> Result<(), ParseIntError> {
     };
     let filename = cli.file.to_string_lossy();
     let bytecode = match filename {
-        Cow::Borrowed(filename) => grim::assemble(filename, &src, bits)?,
-        Cow::Owned(filename) => grim::assemble(&filename, &src, bits)?,
+        Cow::Borrowed(filename) => grim::assemble(filename, &src, bits, cli.endianness)?,
+        Cow::Owned(filename) => grim::assemble(&filename, &src, bits, cli.endianness)?,
     };
     let mut out_file = cli.file;
     if !out_file.set_extension("nvm") {
