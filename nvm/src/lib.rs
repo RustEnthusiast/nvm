@@ -70,8 +70,9 @@
 #![cfg_attr(feature = "bin", allow(unused_crate_dependencies))]
 #[cfg(feature = "std")]
 extern crate alloc;
+pub mod constants;
 pub mod opcode;
-use self::opcode::OpCode;
+use self::{constants::BUILTIN_REGS, opcode::OpCode};
 use bytemuck::NoUninit;
 use cfg_if::cfg_if;
 use core::{
@@ -135,6 +136,12 @@ pub enum NvmError {
     /// An error that can never occur.
     #[cfg_attr(feature = "std", error("this error should never be encountered"))]
     Infallible,
+    /// A virtual machine was created with an invalid number of registers.
+    #[cfg_attr(
+        feature = "std",
+        error("a virtual machine was created with an invalid register count of {0}")
+    )]
+    InvalidRegisterCount(usize),
     /// An invalid instruction/operation code was encountered.
     #[cfg_attr(
         feature = "std",
@@ -281,27 +288,38 @@ macro_rules! checked_sub {
 struct RegConst(u8, UInt);
 
 /// The NVM virtual machine.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 #[allow(missing_copy_implementations)]
-pub struct VM {
+pub struct VM<const REG_COUNT: usize> {
     /// The general purpose registers.
-    reg: [UInt; 7],
+    reg: [UInt; REG_COUNT],
 }
-impl VM {
+impl<const REG_COUNT: usize> VM<REG_COUNT> {
     /// A constant for indexing the virtual machine's instruction pointer register.
-    pub const IP: usize = 4;
+    pub const IP: usize = REG_COUNT - BUILTIN_REGS;
 
     /// A constant for indexing the virtual machine's stack pointer register.
-    pub const SP: usize = 5;
+    pub const SP: usize = REG_COUNT - BUILTIN_REGS + 1;
 
     /// A constant for indexing the virtual machine's flags register.
-    pub const FLAGS: usize = 6;
+    pub const FLAGS: usize = REG_COUNT - BUILTIN_REGS + 2;
 
     /// Creates a new NVM virtual machine.
+    ///
+    /// # Errors
+    ///
+    /// This operation will return an [`InvalidRegisterCount`] error if `REG_COUNT` is
+    /// less than [`BUILTIN_REGS`].
+    ///
+    /// [`InvalidRegisterCount`]: NvmError::InvalidRegisterCount
     #[inline]
-    #[must_use]
-    pub const fn new() -> Self {
-        Self { reg: [0; 7] }
+    pub const fn new() -> Result<Self, NvmError> {
+        if REG_COUNT < BUILTIN_REGS {
+            return Err(NvmError::InvalidRegisterCount(REG_COUNT));
+        }
+        Ok(Self {
+            reg: [0; REG_COUNT],
+        })
     }
 
     /// Returns a copy of a register.
@@ -318,36 +336,42 @@ impl VM {
 
     /// Returns a copy of the instruction pointer.
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     const fn ip(&self) -> UInt {
         self.reg[Self::IP]
     }
 
     /// Returns a mutable reference to the instruction pointer.
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     fn ip_mut(&mut self) -> &mut UInt {
         &mut self.reg[Self::IP]
     }
 
     /// Returns a copy of the stack pointer.
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     const fn sp(&self) -> UInt {
         self.reg[Self::SP]
     }
 
     /// Returns a mutable reference to the stack pointer.
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     fn sp_mut(&mut self) -> &mut UInt {
         &mut self.reg[Self::SP]
     }
 
     /// Returns a copy of the flags register.
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     const fn flags(&self) -> UInt {
         self.reg[Self::FLAGS]
     }
 
     /// Returns a mutable reference to the flags register.
     #[inline]
+    #[allow(clippy::indexing_slicing)]
     fn flags_mut(&mut self) -> &mut UInt {
         &mut self.reg[Self::FLAGS]
     }
@@ -836,8 +860,8 @@ impl VM {
                     #[cfg(feature = "std")]
                     {
                         /// Gets the next FFI type from memory.
-                        fn next_type(
-                            vm: &mut VM,
+                        fn next_type<const REG_COUNT: usize>(
+                            vm: &mut VM<REG_COUNT>,
                             memory: &impl MemoryDriver,
                         ) -> Result<Type, NvmError> {
                             match vm.pop::<u8>(memory)? {

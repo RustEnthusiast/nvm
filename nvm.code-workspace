@@ -1,6 +1,9 @@
 {
 	"folders": [
 		{
+			"path": "."
+		},
+		{
 			"path": "nvm"
 		},
 		{
@@ -9,8 +12,5 @@
 		{
 			"path": "salvo"
 		}
-	],
-	"settings": {
-		"rust-analyzer.cargo.features": "all"
-	}
+	]
 }

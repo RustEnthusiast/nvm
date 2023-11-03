@@ -1,9 +1,8 @@
 //! The virtual memory driver.
-use build_const::build_const;
+use crate::constants::STACK_SIZE;
 use bytemuck::NoUninit;
 use nvm::{opcode::OpCode, MemoryDriver, NvmError, UInt};
 use std::ptr::addr_of;
-build_const!("constants");
 
 /// The virtual memory driver.
 pub struct Memory {

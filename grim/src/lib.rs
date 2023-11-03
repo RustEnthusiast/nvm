@@ -53,9 +53,10 @@ pub fn assemble(
     src: &str,
     bits: Bits,
     endianness: Endianness,
+    regs: u8,
 ) -> Result<Vec<u8>, ParseIntError> {
     let tokens = lexer::lex(filename, src);
-    let (items, locations) = parser::parse(filename, src, tokens.iter(), bits)?;
+    let (items, locations) = parser::parse(filename, src, tokens.iter(), bits, regs)?;
     Ok(codegen::gen_bytecode(items, &locations, endianness))
 }
 

@@ -14,7 +14,7 @@ lto = true
 strip = true
 
 [features]
-bin = ["build_const", "std"]
+bin = ["std"]
 std = ["libffi", "libloading", "thiserror"]
 8bit = []
 16bit = []
@@ -23,10 +23,10 @@ std = ["libffi", "libloading", "thiserror"]
 128bit = []
 
 [build-dependencies]
-build_const = { version = "0.2", optional = true }
+build_const = { version = "0.2" }
 
 [dependencies]
-build_const = { version = "0.2", optional = true, default-features = false }
+build_const = { version = "0.2", default-features = false }
 bytemuck = "1.13"
 cfg-if = "1.0"
 libffi = { version = "3.2", optional = true }

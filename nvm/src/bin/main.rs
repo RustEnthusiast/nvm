@@ -32,7 +32,7 @@
     clippy::useless_conversion
 )]
 mod memory;
-use self::memory::Memory;
+use self::{constants::REG_COUNT, memory::Memory};
 use nvm::{NvmError, VM};
 use std::{convert::Infallible, io::Error as IoError, num::TryFromIntError};
 use thiserror::Error;
@@ -54,11 +54,19 @@ pub enum ProgramError {
     TryFromIntError(#[from] TryFromIntError),
 }
 
+/// Compile time constants.
+#[allow(clippy::missing_docs_in_private_items)]
+mod constants {
+    use build_const::build_const;
+
+    build_const!("bin_constants");
+}
+
 /// Main entry point of the program.
 fn main() -> Result<(), ProgramError> {
     if let Some(f) = std::env::args_os().nth(1) {
         let mut memory = Memory::new();
-        let mut vm = VM::new();
+        let mut vm = VM::<REG_COUNT>::new()?;
         match vm.run(&std::fs::read(f)?, &mut memory) {
             Ok(code) => std::process::exit(code.try_into()?),
             Err(err) => panic!("error: {err}\nvirtual machine state: {vm:?}"),

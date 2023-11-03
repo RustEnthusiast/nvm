@@ -291,15 +291,18 @@ pub(super) enum Item<'tok> {
 }
 
 /// Makes sure a token is a valid register identifier.
-fn assert_reg_ident(filename: &str, src: &str, token: &Token, reg_tok: &Token) -> u8 {
+fn assert_reg_ident(filename: &str, src: &str, token: &Token, reg_tok: &Token, regs: u8) -> u8 {
     if reg_tok.ty() == TokenType::Ident {
         match reg_tok.tok() {
-            "r0" => return 0,
-            "r1" => return 1,
-            "r2" => return 2,
-            "r3" => return 3,
-            "ip" => return 4,
-            "sp" => return 5,
+            "ip" => return regs,
+            "sp" => return regs + 1,
+            r if r.starts_with('r') => {
+                if let Ok(i) = r[1..].parse::<u8>() {
+                    if i < regs {
+                        return i;
+                    }
+                }
+            }
             _ => {}
         }
     }
@@ -319,9 +322,13 @@ fn next_reg_ident<'tok, 'src>(
     src: &str,
     token: &Token,
     tokens: &mut Iter<'tok, Token<'src>>,
+    regs: u8,
 ) -> (u8, &'tok Token<'src>) {
     match tokens.next() {
-        Some(reg_tok) => (assert_reg_ident(filename, src, token, reg_tok), reg_tok),
+        Some(reg_tok) => (
+            assert_reg_ident(filename, src, token, reg_tok, regs),
+            reg_tok,
+        ),
         _ => crate::grim_error(
             (filename, src, token.loc().byte_pos()),
             "Expected a register identifier as an instruction operand.",
@@ -457,157 +464,158 @@ fn next_instruction<'tok>(
     token: &'tok Token,
     tokens: &mut Iter<'tok, Token>,
     bits: Bits,
+    regs: u8,
 ) -> Result<Result<Instruction<'tok>, &'tok str>, ParseIntError> {
     match token.tok() {
         "exit" => {
-            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            let (r, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Exit(r)))
         }
         "nop" => Ok(Ok(Instruction::Nop)),
         "move" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Move(r1, r2)))
         }
         "movec" => {
-            let (r, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
             let const_tok = next_reg_const(filename, src, token, tokens, bits)?;
             Ok(Ok(Instruction::MoveConst(r, const_tok)))
         }
         "load" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Load(r1, r2)))
         }
         "loadn" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r2, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
             let n = next_num(filename, src, token, tokens)?;
             Ok(Ok(Instruction::LoadNum(r1, r2, n)))
         }
         "store" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Store(r1, r2)))
         }
         "storen" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r2, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
             let n = next_num(filename, src, token, tokens)?;
             Ok(Ok(Instruction::StoreNum(r1, r2, n)))
         }
         "push" => {
-            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            let (r, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Push(r)))
         }
         "pushn" => {
-            let (r, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
             let n = next_num(filename, src, token, tokens)?;
             Ok(Ok(Instruction::PushNum(r, n)))
         }
         "pop" => {
-            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            let (r, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Pop(r)))
         }
         "popn" => {
-            let (r, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
             let n = next_num(filename, src, token, tokens)?;
             Ok(Ok(Instruction::PopNum(r, n)))
         }
         "neg" => {
-            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            let (r, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Neg(r)))
         }
         "add" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Add(r1, r2)))
         }
         "addi" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::AddI(r1, r2)))
         }
         "sub" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Sub(r1, r2)))
         }
         "subi" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::SubI(r1, r2)))
         }
         "mul" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Mul(r1, r2)))
         }
         "muli" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::MulI(r1, r2)))
         }
         "div" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Div(r1, r2)))
         }
         "divi" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::DivI(r1, r2)))
         }
         "not" => {
-            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            let (r, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Not(r)))
         }
         "and" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::And(r1, r2)))
         }
         "or" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Or(r1, r2)))
         }
         "xor" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Xor(r1, r2)))
         }
         "shl" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Shl(r1, r2)))
         }
         "shr" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Shr(r1, r2)))
         }
         "call" => {
@@ -616,9 +624,9 @@ fn next_instruction<'tok>(
         }
         "return" => Ok(Ok(Instruction::Return)),
         "cmp" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Cmp(r1, r2)))
         }
         "jump" => {
@@ -698,23 +706,23 @@ fn next_instruction<'tok>(
             Ok(Ok(Instruction::JLE(n)))
         }
         "loadlib" => {
-            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            let (r, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::LoadLib(r)))
         }
         "loadsym" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::LoadSym(r1, r2)))
         }
         "syscall" => {
-            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens);
+            let (r1, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let (r2, _) = next_reg_ident(filename, src, token, tokens);
+            let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Syscall(r1, r2)))
         }
         "freelib" => {
-            let (r, _) = next_reg_ident(filename, src, token, tokens);
+            let (r, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::FreeLib(r)))
         }
         ident => Ok(Err(ident)),
@@ -733,21 +741,24 @@ pub(super) fn parse<'tok>(
     src: &str,
     mut tokens: Iter<'tok, Token>,
     bits: Bits,
+    regs: u8,
 ) -> Result<(Vec<Item<'tok>>, HashMap<&'tok str, UInt>), ParseIntError> {
     let mut items = Vec::new();
     let mut loc = 0;
     let mut locations = HashMap::new();
     while let Some(token) = tokens.next() {
         match token.ty() {
-            TokenType::Ident => match next_instruction(filename, src, token, &mut tokens, bits)? {
-                Ok(instruction) => {
-                    loc += instruction.size(bits) as UMax;
-                    items.push(Item::Instruction(instruction));
+            TokenType::Ident => {
+                match next_instruction(filename, src, token, &mut tokens, bits, regs)? {
+                    Ok(instruction) => {
+                        loc += instruction.size(bits) as UMax;
+                        items.push(Item::Instruction(instruction));
+                    }
+                    Err(ident) => {
+                        locations.insert(ident, UInt::from_umax(loc, bits));
+                    }
                 }
-                Err(ident) => {
-                    locations.insert(ident, UInt::from_umax(loc, bits));
-                }
-            },
+            }
             TokenType::Punct if token.tok() == "-" => {
                 if let Some(num_tok) = tokens.next() {
                     let sign_pos = token.loc().byte_pos();
