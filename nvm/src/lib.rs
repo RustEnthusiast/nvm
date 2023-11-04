@@ -683,11 +683,33 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                 }
                 OpCode::Shl => {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
-                    *self.reg_mut(l.try_into()?)? <<= self.reg(r.try_into()?)?;
+                    let l = l.try_into()?;
+                    let r = self.reg(r.try_into()?)?.try_into()?;
+                    let (shl, c) = self.reg(l)?.overflowing_shl(r);
+                    match c {
+                        true => *self.flags_mut() |= Flags::Carry as UInt,
+                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
+                    }
+                    match shl == 0 {
+                        true => *self.flags_mut() |= Flags::Zero as UInt,
+                        false => *self.flags_mut() &= !(Flags::Zero as UInt),
+                    }
+                    *self.reg_mut(l)? = shl;
                 }
                 OpCode::Shr => {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
-                    *self.reg_mut(l.try_into()?)? >>= self.reg(r.try_into()?)?;
+                    let l = l.try_into()?;
+                    let r = self.reg(r.try_into()?)?.try_into()?;
+                    let (shr, c) = self.reg(l)?.overflowing_shr(r);
+                    match c {
+                        true => *self.flags_mut() |= Flags::Carry as UInt,
+                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
+                    }
+                    match shr == 0 {
+                        true => *self.flags_mut() |= Flags::Zero as UInt,
+                        false => *self.flags_mut() &= !(Flags::Zero as UInt),
+                    }
+                    *self.reg_mut(l)? = shr;
                 }
                 OpCode::Call => {
                     self.push(memory, &self.ip())?;
