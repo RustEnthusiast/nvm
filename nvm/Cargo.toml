@@ -16,6 +16,8 @@ strip = true
 [features]
 bin = ["std"]
 std = ["libffi", "libloading", "thiserror"]
+little_endian = []
+big_endian = []
 8bit = []
 16bit = []
 32bit = []

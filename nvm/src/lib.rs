@@ -256,6 +256,44 @@ pub trait MemoryDriver {
     fn write_bytes(&mut self, pos: UInt, buffer: &[u8]) -> Result<(), NvmError>;
 }
 
+/// A trait implemented on types that have an endian dependent layout.
+trait HasEndianness: Sized {
+    /// Reads a value from `memory`.
+    ///
+    /// How the value is read from memory is dependent on what endian feature flags are set.
+    fn read(memory: &impl MemoryDriver, pos: UInt) -> Result<Self, NvmError>;
+}
+impl HasEndianness for UInt {
+    /// Reads a value from `memory`.
+    ///
+    /// How the value is read from memory is dependent on what endian feature flags are set.
+    #[inline]
+    fn read(memory: &impl MemoryDriver, pos: UInt) -> Result<Self, NvmError> {
+        let mut s = memory.read::<Self>(pos)?;
+        if cfg!(feature = "little_endian") {
+            s = Self::from_le(s);
+        } else if cfg!(feature = "big_endian") {
+            s = Self::from_be(s);
+        }
+        Ok(s)
+    }
+}
+impl HasEndianness for RegConst {
+    /// Reads a value from `memory`.
+    ///
+    /// How the value is read from memory is dependent on what endian feature flags are set.
+    #[inline]
+    fn read(memory: &impl MemoryDriver, pos: UInt) -> Result<Self, NvmError> {
+        let mut s = memory.read::<Self>(pos)?;
+        if cfg!(feature = "little_endian") {
+            s.1 = UInt::from_le(s.1);
+        } else if cfg!(feature = "big_endian") {
+            s.1 = UInt::from_be(s.1);
+        }
+        Ok(s)
+    }
+}
+
 /// Describes the flags register.
 enum Flags {
     /// Indicates a zero result.
@@ -419,7 +457,7 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     *self.reg_mut(l.try_into()?)? = self.reg(r.try_into()?)?;
                 }
                 OpCode::MoveConst => {
-                    let RegConst(r, c) = memory.read::<RegConst>(checked_add!(ip, 1)?)?;
+                    let RegConst(r, c) = RegConst::read(memory, checked_add!(ip, 1)?)?;
                     *self.reg_mut(r.try_into()?)? = c;
                 }
                 OpCode::Load => {
@@ -713,7 +751,7 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                 }
                 OpCode::Call => {
                     self.push(memory, &self.ip())?;
-                    *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                    *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                 }
                 OpCode::Return => *self.ip_mut() = self.pop(memory)?,
                 OpCode::Cmp => {
@@ -742,59 +780,59 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                         }
                     }
                 }
-                OpCode::Jump => *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?,
+                OpCode::Jump => *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?,
                 OpCode::JZ | OpCode::JE => {
                     if (self.flags() & (Flags::Zero as UInt)) != 0 {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JNZ | OpCode::JNE => {
                     if (self.flags() & (Flags::Zero as UInt)) == 0 {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JC | OpCode::JB => {
                     if (self.flags() & (Flags::Carry as UInt)) != 0 {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JNC | OpCode::JAE => {
                     if (self.flags() & (Flags::Carry as UInt)) == 0 {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JO => {
                     if (self.flags() & (Flags::Overflow as UInt)) != 0 {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JNO => {
                     if (self.flags() & (Flags::Overflow as UInt)) == 0 {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JS => {
                     if (self.flags() & (Flags::Sign as UInt)) != 0 {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JNS => {
                     if (self.flags() & (Flags::Sign as UInt)) == 0 {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JA => {
                     if (self.flags() & (Flags::Zero as UInt)) == 0
                         && (self.flags() & (Flags::Carry as UInt)) == 0
                     {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JBE => {
                     if (self.flags() & (Flags::Zero as UInt)) != 0
                         || (self.flags() & (Flags::Carry as UInt)) != 0
                     {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JG => {
@@ -802,21 +840,21 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                         && (((self.flags() & (Flags::Sign as UInt)) == 0)
                             == ((self.flags() & (Flags::Overflow as UInt)) == 0))
                     {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JGE => {
                     if ((self.flags() & (Flags::Sign as UInt)) == 0)
                         == ((self.flags() & (Flags::Overflow as UInt)) == 0)
                     {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JL => {
                     if ((self.flags() & (Flags::Sign as UInt)) == 0)
                         != ((self.flags() & (Flags::Overflow as UInt)) == 0)
                     {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::JLE => {
@@ -824,7 +862,7 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                         || (((self.flags() & (Flags::Sign as UInt)) == 0)
                             != ((self.flags() & (Flags::Overflow as UInt)) == 0))
                     {
-                        *self.ip_mut() = memory.read(checked_add!(ip, 1)?)?;
+                        *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                     }
                 }
                 OpCode::LoadLib => {
