@@ -161,8 +161,8 @@ pub(super) fn gen_bytecode<'tok, I: IntoIterator<Item = Item<'tok>>>(
             }
             Item::Instruction(Instruction::Return) => bytes.push(OpCode::Return as _),
             Item::Instruction(Instruction::Cmp(r1, r2)) => bytes.extend([OpCode::Cmp as _, r1, r2]),
-            Item::Instruction(Instruction::Jump(n)) => {
-                bytes.push(OpCode::Jump as _);
+            Item::Instruction(Instruction::Jmp(n)) => {
+                bytes.push(OpCode::Jmp as _);
                 let n = get_reg_const(&n, locations);
                 bytes.extend(n.as_endian_bytes(endianness));
             }

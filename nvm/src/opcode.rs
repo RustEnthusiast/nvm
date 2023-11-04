@@ -274,7 +274,7 @@ pub enum OpCode {
     /// # Format arguments
     ///
     /// - `uint i` - The memory location to jump to.
-    Jump,
+    Jmp,
     /// Jumps to a location in memory if the zero flag is set.
     ///
     /// # Format arguments
@@ -531,7 +531,7 @@ impl OpCode {
             | Self::Syscall => 3,
             Self::LoadNum | Self::StoreNum => 4,
             Self::Call
-            | Self::Jump
+            | Self::Jmp
             | Self::JZ
             | Self::JNZ
             | Self::JO

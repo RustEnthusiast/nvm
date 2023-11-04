@@ -166,8 +166,8 @@ pub(super) enum Instruction<'tok> {
     Return,
     /// The `cmp` instruction.
     Cmp(u8, u8),
-    /// The `jump` instruction.
-    Jump(RegConst<'tok>),
+    /// The `jmp` instruction.
+    Jmp(RegConst<'tok>),
     /// The `jz` instruction.
     JZ(RegConst<'tok>),
     /// The `jnz` instruction.
@@ -248,7 +248,7 @@ impl Instruction<'_> {
             | Self::Syscall(_, _) => 3,
             Self::LoadNum(_, _, _) | Self::StoreNum(_, _, _) => 4,
             Self::Call(_)
-            | Self::Jump(_)
+            | Self::Jmp(_)
             | Self::JZ(_)
             | Self::JNZ(_)
             | Self::JO(_)
@@ -629,9 +629,9 @@ fn next_instruction<'tok>(
             let (r2, _) = next_reg_ident(filename, src, token, tokens, regs);
             Ok(Ok(Instruction::Cmp(r1, r2)))
         }
-        "jump" => {
+        "jmp" => {
             let n = next_reg_const(filename, src, token, tokens, bits)?;
-            Ok(Ok(Instruction::Jump(n)))
+            Ok(Ok(Instruction::Jmp(n)))
         }
         "jz" => {
             let n = next_reg_const(filename, src, token, tokens, bits)?;

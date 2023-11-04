@@ -13,7 +13,7 @@ struct Cli {
     bits: String,
     /// The target machine's endianness.
     #[arg(long, value_enum, default_value = "native")]
-    endianness: Endianness,
+    endian: Endianness,
     /// The number of general purpose registers that the target VM has.
     #[arg(long, default_value = "4")]
     regs: u8,
@@ -36,8 +36,8 @@ fn main() -> Result<(), ParseIntError> {
     };
     let filename = cli.file.to_string_lossy();
     let bytecode = match filename {
-        Cow::Borrowed(filename) => grim::assemble(filename, &src, bits, cli.endianness, cli.regs)?,
-        Cow::Owned(filename) => grim::assemble(&filename, &src, bits, cli.endianness, cli.regs)?,
+        Cow::Borrowed(filename) => grim::assemble(filename, &src, bits, cli.endian, cli.regs)?,
+        Cow::Owned(filename) => grim::assemble(&filename, &src, bits, cli.endian, cli.regs)?,
     };
     let mut out_file = cli.file;
     if !out_file.set_extension("nvm") {

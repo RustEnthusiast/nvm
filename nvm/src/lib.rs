@@ -163,7 +163,7 @@ pub enum NvmError {
     /// A memory driver failed to read from a specific memory location.
     #[cfg_attr(
         feature = "std",
-        error("a virtual memory driver failed to read {len} bytes from location {pos}")
+        error("a virtual memory driver failed to read {len} bytes from virtual memory location {pos:#X}")
     )]
     MemoryReadError {
         /// The memory position of the read.
@@ -174,7 +174,7 @@ pub enum NvmError {
     /// A memory driver failed to write to a specific memory location.
     #[cfg_attr(
         feature = "std",
-        error("a virtual memory driver failed to write {len} bytes to location {pos}")
+        error("a virtual memory driver failed to write {len} bytes to virtual memory location {pos:#X}")
     )]
     MemoryWriteError {
         /// The memory position of the read.
@@ -780,7 +780,7 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                         }
                     }
                 }
-                OpCode::Jump => *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?,
+                OpCode::Jmp => *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?,
                 OpCode::JZ | OpCode::JE => {
                     if (self.flags() & (Flags::Zero as UInt)) != 0 {
                         *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
