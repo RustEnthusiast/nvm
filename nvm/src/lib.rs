@@ -433,6 +433,15 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
         memory.read(self.sp())
     }
 
+    /// Sets or unsets `flag`.
+    #[inline]
+    fn set(&mut self, set: bool, flag: Flags) {
+        match set {
+            true => *self.flags_mut() |= flag as UInt,
+            false => *self.flags_mut() &= !(flag as UInt),
+        }
+    }
+
     /// Runs the NVM bytecode on the virtual machine.
     ///
     /// # Errors
@@ -543,19 +552,13 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                 OpCode::Neg => {
                     let r = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
                     let (n, o) = (self.reg(r)? as Int).overflowing_neg();
-                    match o {
-                        true => *self.flags_mut() |= Flags::Overflow as UInt,
-                        false => *self.flags_mut() &= !(Flags::Overflow as UInt),
-                    }
+                    self.set(o, Flags::Overflow);
                     if n == 0 {
                         *self.flags_mut() =
                             self.flags() | Flags::Zero as UInt & !(Flags::Sign as UInt);
                     } else {
                         *self.flags_mut() &= !(Flags::Zero as UInt);
-                        match n < 0 {
-                            true => *self.flags_mut() |= Flags::Sign as UInt,
-                            false => *self.flags_mut() &= !(Flags::Sign as UInt),
-                        }
+                        self.set(n < 0, Flags::Sign);
                     }
                     *self.reg_mut(r)? = n as UInt;
                 }
@@ -563,14 +566,8 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
                     let l = l.try_into()?;
                     let (add, c) = self.reg(l)?.overflowing_add(self.reg(r.try_into()?)?);
-                    match c {
-                        true => *self.flags_mut() |= Flags::Carry as UInt,
-                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
-                    }
-                    match add == 0 {
-                        true => *self.flags_mut() |= Flags::Zero as UInt,
-                        false => *self.flags_mut() &= !(Flags::Zero as UInt),
-                    }
+                    self.set(c, Flags::Carry);
+                    self.set(add == 0, Flags::Zero);
                     *self.reg_mut(l)? = add;
                 }
                 #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
@@ -579,19 +576,13 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let l = l.try_into()?;
                     let r = self.reg(r.try_into()?)? as Int;
                     let (add, o) = (self.reg(l)? as Int).overflowing_add(r);
-                    match o {
-                        true => *self.flags_mut() |= Flags::Overflow as UInt,
-                        false => *self.flags_mut() &= !(Flags::Overflow as UInt),
-                    }
+                    self.set(o, Flags::Overflow);
                     if add == 0 {
                         *self.flags_mut() =
                             self.flags() | Flags::Zero as UInt & !(Flags::Sign as UInt);
                     } else {
                         *self.flags_mut() &= !(Flags::Zero as UInt);
-                        match add < 0 {
-                            true => *self.flags_mut() |= Flags::Sign as UInt,
-                            false => *self.flags_mut() &= !(Flags::Sign as UInt),
-                        }
+                        self.set(add < 0, Flags::Sign);
                     }
                     *self.reg_mut(l)? = add as UInt;
                 }
@@ -599,14 +590,8 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
                     let l = l.try_into()?;
                     let (sub, c) = self.reg(l)?.overflowing_sub(self.reg(r.try_into()?)?);
-                    match c {
-                        true => *self.flags_mut() |= Flags::Carry as UInt,
-                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
-                    }
-                    match sub == 0 {
-                        true => *self.flags_mut() |= Flags::Zero as UInt,
-                        false => *self.flags_mut() &= !(Flags::Zero as UInt),
-                    }
+                    self.set(c, Flags::Carry);
+                    self.set(sub == 0, Flags::Zero);
                     *self.reg_mut(l)? = sub;
                 }
                 #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
@@ -615,19 +600,13 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let l = l.try_into()?;
                     let r = self.reg(r.try_into()?)? as Int;
                     let (sub, o) = (self.reg(l)? as Int).overflowing_sub(r);
-                    match o {
-                        true => *self.flags_mut() |= Flags::Overflow as UInt,
-                        false => *self.flags_mut() &= !(Flags::Overflow as UInt),
-                    }
+                    self.set(o, Flags::Overflow);
                     if sub == 0 {
                         *self.flags_mut() =
                             self.flags() | Flags::Zero as UInt & !(Flags::Sign as UInt);
                     } else {
                         *self.flags_mut() &= !(Flags::Zero as UInt);
-                        match sub < 0 {
-                            true => *self.flags_mut() |= Flags::Sign as UInt,
-                            false => *self.flags_mut() &= !(Flags::Sign as UInt),
-                        }
+                        self.set(sub < 0, Flags::Sign);
                     }
                     *self.reg_mut(l)? = sub as UInt;
                 }
@@ -635,14 +614,8 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
                     let l = l.try_into()?;
                     let (mul, c) = self.reg(l)?.overflowing_mul(self.reg(r.try_into()?)?);
-                    match c {
-                        true => *self.flags_mut() |= Flags::Carry as UInt,
-                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
-                    }
-                    match mul == 0 {
-                        true => *self.flags_mut() |= Flags::Zero as UInt,
-                        false => *self.flags_mut() &= !(Flags::Zero as UInt),
-                    }
+                    self.set(c, Flags::Carry);
+                    self.set(mul == 0, Flags::Zero);
                     *self.reg_mut(l)? = mul;
                 }
                 #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
@@ -651,19 +624,13 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let l = l.try_into()?;
                     let r = self.reg(r.try_into()?)? as Int;
                     let (mul, o) = (self.reg(l)? as Int).overflowing_mul(r);
-                    match o {
-                        true => *self.flags_mut() |= Flags::Overflow as UInt,
-                        false => *self.flags_mut() &= !(Flags::Overflow as UInt),
-                    }
+                    self.set(o, Flags::Overflow);
                     if mul == 0 {
                         *self.flags_mut() =
                             self.flags() | Flags::Zero as UInt & !(Flags::Sign as UInt);
                     } else {
                         *self.flags_mut() &= !(Flags::Zero as UInt);
-                        match mul < 0 {
-                            true => *self.flags_mut() |= Flags::Sign as UInt,
-                            false => *self.flags_mut() &= !(Flags::Sign as UInt),
-                        }
+                        self.set(mul < 0, Flags::Sign);
                     }
                     *self.reg_mut(l)? = mul as UInt;
                 }
@@ -671,14 +638,8 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
                     let l = l.try_into()?;
                     let (div, c) = self.reg(l)?.overflowing_div(self.reg(r.try_into()?)?);
-                    match c {
-                        true => *self.flags_mut() |= Flags::Carry as UInt,
-                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
-                    }
-                    match div == 0 {
-                        true => *self.flags_mut() |= Flags::Zero as UInt,
-                        false => *self.flags_mut() &= !(Flags::Zero as UInt),
-                    }
+                    self.set(c, Flags::Carry);
+                    self.set(div == 0, Flags::Zero);
                     *self.reg_mut(l)? = div;
                 }
                 #[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
@@ -687,19 +648,13 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let l = l.try_into()?;
                     let r = self.reg(r.try_into()?)? as Int;
                     let (div, o) = (self.reg(l)? as Int).overflowing_div(r);
-                    match o {
-                        true => *self.flags_mut() |= Flags::Overflow as UInt,
-                        false => *self.flags_mut() &= !(Flags::Overflow as UInt),
-                    }
+                    self.set(o, Flags::Overflow);
                     if div == 0 {
                         *self.flags_mut() =
                             self.flags() | Flags::Zero as UInt & !(Flags::Sign as UInt);
                     } else {
                         *self.flags_mut() &= !(Flags::Zero as UInt);
-                        match div < 0 {
-                            true => *self.flags_mut() |= Flags::Sign as UInt,
-                            false => *self.flags_mut() &= !(Flags::Sign as UInt),
-                        }
+                        self.set(div < 0, Flags::Sign);
                     }
                     *self.reg_mut(l)? = div as UInt;
                 }
@@ -724,14 +679,8 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let l = l.try_into()?;
                     let r = self.reg(r.try_into()?)?.try_into()?;
                     let (shl, c) = self.reg(l)?.overflowing_shl(r);
-                    match c {
-                        true => *self.flags_mut() |= Flags::Carry as UInt,
-                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
-                    }
-                    match shl == 0 {
-                        true => *self.flags_mut() |= Flags::Zero as UInt,
-                        false => *self.flags_mut() &= !(Flags::Zero as UInt),
-                    }
+                    self.set(c, Flags::Carry);
+                    self.set(shl == 0, Flags::Zero);
                     *self.reg_mut(l)? = shl;
                 }
                 OpCode::Shr => {
@@ -739,14 +688,8 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let l = l.try_into()?;
                     let r = self.reg(r.try_into()?)?.try_into()?;
                     let (shr, c) = self.reg(l)?.overflowing_shr(r);
-                    match c {
-                        true => *self.flags_mut() |= Flags::Carry as UInt,
-                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
-                    }
-                    match shr == 0 {
-                        true => *self.flags_mut() |= Flags::Zero as UInt,
-                        false => *self.flags_mut() &= !(Flags::Zero as UInt),
-                    }
+                    self.set(c, Flags::Carry);
+                    self.set(shr == 0, Flags::Zero);
                     *self.reg_mut(l)? = shr;
                 }
                 OpCode::Call => {
@@ -759,25 +702,16 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     let l = self.reg(l.try_into()?)?;
                     let r = self.reg(r.try_into()?)?;
                     let (_, c) = l.overflowing_sub(r);
-                    match c {
-                        true => *self.flags_mut() |= Flags::Carry as UInt,
-                        false => *self.flags_mut() &= !(Flags::Carry as UInt),
-                    }
+                    self.set(c, Flags::Carry);
                     #[allow(clippy::cast_possible_wrap)]
                     let (sub, o) = (l as Int).overflowing_sub(r as Int);
-                    match o {
-                        true => *self.flags_mut() |= Flags::Overflow as UInt,
-                        false => *self.flags_mut() &= !(Flags::Overflow as UInt),
-                    }
+                    self.set(o, Flags::Overflow);
                     if sub == 0 {
                         *self.flags_mut() =
                             self.flags() | Flags::Zero as UInt & !(Flags::Sign as UInt);
                     } else {
                         *self.flags_mut() &= !(Flags::Zero as UInt);
-                        match sub < 0 {
-                            true => *self.flags_mut() |= Flags::Sign as UInt,
-                            false => *self.flags_mut() &= !(Flags::Sign as UInt),
-                        }
+                        self.set(sub < 0, Flags::Sign);
                     }
                 }
                 OpCode::Jmp => *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?,
