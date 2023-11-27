@@ -45,13 +45,38 @@ impl SrcLoc {
     }
 }
 
+/// Represents a numeric literal's base/radix.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Radix {
+    /// Base 2.
+    Bin,
+    /// Base 8.
+    Oct,
+    /// Base 10.
+    Default,
+    /// Base 16.
+    Hex,
+}
+impl Radix {
+    /// Turns a [`Radix`] into a `u32`.
+    #[inline]
+    pub(super) fn as_u32(self) -> u32 {
+        match self {
+            Self::Bin => 2,
+            Self::Oct => 8,
+            Self::Default => 10,
+            Self::Hex => 16,
+        }
+    }
+}
+
 /// Describes the type of a token.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum TokenType {
     /// An identifier token.
     Ident,
     /// A numeric token.
-    Num,
+    Num(Radix),
     /// A punctuation token.
     Punct,
     /// A string token.
@@ -127,9 +152,15 @@ fn skip_ident(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) {
 }
 
 /// Skips over a numerical token.
-fn skip_num(chars: &mut Peekable<Chars>, loc: &mut SrcLoc) {
+fn skip_num(chars: &mut Peekable<Chars>, loc: &mut SrcLoc, base: Radix) {
+    let check = match base {
+        Radix::Bin => |c: char| c == '0' || c == '1',
+        Radix::Oct => |c: char| matches!(c, '0'..='7'),
+        Radix::Default => |c: char| matches!(c, '0'..='9'),
+        Radix::Hex => |c: char| matches!(c, '0'..='9' | 'a'..='f' | 'A'..='F'),
+    };
     while let Some(chr) = chars.peek().copied() {
-        if chr.is_numeric() {
+        if check(chr) {
             chars.next();
             unsafe { loc.next_unchecked(chr) };
         } else {
@@ -171,7 +202,7 @@ pub(super) fn lex<'src>(filename: &str, src: &'src str) -> Vec<Token<'src>> {
     let mut loc = SrcLoc::default();
     let mut tokens = Vec::new();
     while let Some(chr) = skip_whitespace(&mut chars, &mut loc) {
-        let token_loc = loc;
+        let mut token_loc = loc;
         unsafe { loc.next_unchecked(chr) };
         if chr == '_' || unicode_ident::is_xid_start(chr) {
             skip_ident(&mut chars, &mut loc);
@@ -181,11 +212,25 @@ pub(super) fn lex<'src>(filename: &str, src: &'src str) -> Vec<Token<'src>> {
                 ty: TokenType::Ident,
             });
         } else if chr.is_numeric() {
-            skip_num(&mut chars, &mut loc);
+            let mut base = Radix::Default;
+            if chr == '0' {
+                match chars.peek() {
+                    Some(r) if r.eq_ignore_ascii_case(&'b') => base = Radix::Bin,
+                    Some(r) if r.eq_ignore_ascii_case(&'o') => base = Radix::Oct,
+                    Some(r) if r.eq_ignore_ascii_case(&'x') => base = Radix::Hex,
+                    _ => {}
+                }
+                if base != Radix::Default {
+                    // SAFETY: The next character is a numeric literal radix specifier.
+                    unsafe { loc.next_unchecked(chars.next().unwrap_unchecked()) };
+                    token_loc = loc;
+                }
+            }
+            skip_num(&mut chars, &mut loc, base);
             tokens.push(Token {
                 loc: token_loc,
                 tok: &src[token_loc.byte_pos..loc.byte_pos],
-                ty: TokenType::Num,
+                ty: TokenType::Num(base),
             });
         } else if chr == ';' {
             skip_comment(&mut chars, &mut loc);

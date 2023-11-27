@@ -1,9 +1,9 @@
 use crate::{
-    lexer::{Token, TokenType},
+    lexer::{Radix, Token, TokenType},
     Bits,
 };
 use ariadne::Color;
-use std::{collections::HashMap, num::ParseIntError, slice::Iter, str::FromStr};
+use std::{collections::HashMap, num::ParseIntError, slice::Iter};
 
 /// The largest unsigned integer allowed by Grim.
 type UMax = u128;
@@ -38,14 +38,14 @@ impl UInt {
     }
 
     /// Converts a string slice into a [`UInt`] based on `bits`.
-    fn from_str(str: &str, bits: Bits) -> Result<Self, ParseIntError> {
+    fn from_str(str: &str, bits: Bits, radix: Radix) -> Result<Self, ParseIntError> {
         match bits {
-            Bits::BitNative => Ok(Self::USize(str.parse()?)),
-            Bits::Bit8 => Ok(Self::U8(str.parse()?)),
-            Bits::Bit16 => Ok(Self::U16(str.parse()?)),
-            Bits::Bit32 => Ok(Self::U32(str.parse()?)),
-            Bits::Bit64 => Ok(Self::U64(str.parse()?)),
-            Bits::Bit128 => Ok(Self::U128(str.parse()?)),
+            Bits::BitNative => Ok(Self::USize(usize::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit8 => Ok(Self::U8(u8::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit16 => Ok(Self::U16(u16::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit32 => Ok(Self::U32(u32::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit64 => Ok(Self::U64(u64::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit128 => Ok(Self::U128(u128::from_str_radix(str, radix.as_u32())?)),
         }
     }
 }
@@ -81,14 +81,14 @@ pub(super) enum Int {
 }
 impl Int {
     /// Converts a string slice into an [`Int`] based on `bits`.
-    fn from_str(str: &str, bits: Bits) -> Result<Self, ParseIntError> {
+    fn from_str(str: &str, bits: Bits, radix: Radix) -> Result<Self, ParseIntError> {
         match bits {
-            Bits::BitNative => Ok(Self::ISize(str.parse()?)),
-            Bits::Bit8 => Ok(Self::I8(str.parse()?)),
-            Bits::Bit16 => Ok(Self::I16(str.parse()?)),
-            Bits::Bit32 => Ok(Self::I32(str.parse()?)),
-            Bits::Bit64 => Ok(Self::I64(str.parse()?)),
-            Bits::Bit128 => Ok(Self::I128(str.parse()?)),
+            Bits::BitNative => Ok(Self::ISize(isize::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit8 => Ok(Self::I8(i8::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit16 => Ok(Self::I16(i16::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit32 => Ok(Self::I32(i32::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit64 => Ok(Self::I64(i64::from_str_radix(str, radix.as_u32())?)),
+            Bits::Bit128 => Ok(Self::I128(i128::from_str_radix(str, radix.as_u32())?)),
         }
     }
 }
@@ -339,41 +339,37 @@ fn next_reg_ident<'tok, 'src>(
 }
 
 /// Makes sure a token is an numeric constant.
-fn assert_num<F: FromStr>(
-    filename: &str,
-    src: &str,
-    token: &Token,
-    num_token: &Token,
-) -> Result<F, F::Err> {
-    if num_token.ty() != TokenType::Num {
-        let label = token.label(filename, "Instruction encountered here.", Color::Blue);
-        let num_label = num_token.label(filename, "Invalid token encountered here.", Color::Red);
-        crate::grim_error(
-            (filename, src, num_token.loc().byte_pos()),
-            "Expected a numeric constant as an instruction operand.",
-            [label, num_label],
-            None,
-        );
-    }
-    num_token.tok().parse()
+macro_rules! assert_num {
+    ($num_token: ident, $token: ident, $filename: ident, $src: ident, $ty: ty) => {
+        if let TokenType::Num(base) = $num_token.ty() {
+            <$ty>::from_str_radix($num_token.tok(), base.as_u32())
+        } else {
+            let label = $token.label($filename, "Instruction encountered here.", Color::Blue);
+            let num_label =
+                $num_token.label($filename, "Invalid token encountered here.", Color::Red);
+            crate::grim_error(
+                ($filename, $src, $num_token.loc().byte_pos()),
+                "Expected a numeric constant as an instruction operand.",
+                [label, num_label],
+                None,
+            );
+        }
+    };
 }
 
 /// Consumes an numeric constant.
-fn next_num<F: FromStr>(
-    filename: &str,
-    src: &str,
-    token: &Token,
-    tokens: &mut Iter<Token>,
-) -> Result<F, F::Err> {
-    match tokens.next() {
-        Some(num_token) => assert_num(filename, src, token, num_token),
-        _ => crate::grim_error(
-            (filename, src, token.loc().byte_pos()),
-            "Expected a numeric constant as an instruction operand.",
-            [token.label(filename, "Instruction encountered here.", Color::Red)],
-            None,
-        ),
-    }
+macro_rules! next_num {
+    ($tokens: ident, $num_token: ident, $token: ident, $filename: ident, $src: ident, $ty: ty) => {
+        match $tokens.next() {
+            Some($num_token) => assert_num!($num_token, $token, $filename, $src, $ty),
+            _ => crate::grim_error(
+                ($filename, $src, $token.loc().byte_pos()),
+                "Expected a numeric constant as an instruction operand.",
+                [$token.label($filename, "Instruction encountered here.", Color::Red)],
+                None,
+            ),
+        }
+    };
 }
 
 /// Makes sure a token is a register constant.
@@ -390,14 +386,22 @@ fn assert_reg_const<'tok>(
             if let Some(num_token) = tokens.next() {
                 let sign_pos = const_token.loc().byte_pos();
                 let n_pos = num_token.loc().byte_pos();
-                if num_token.ty() == TokenType::Num && n_pos == sign_pos + 1 {
-                    let n_len = num_token.tok().len();
-                    let tok = &src[sign_pos..n_pos + n_len];
-                    return Ok(RegConst::Int(Int::from_str(tok, bits)?));
+                if let TokenType::Num(base) = num_token.ty() {
+                    if n_pos == sign_pos + 1 {
+                        let n_len = num_token.tok().len();
+                        let tok = &src[sign_pos..n_pos + n_len];
+                        return Ok(RegConst::Int(Int::from_str(tok, bits, base)?));
+                    }
                 }
             }
         }
-        TokenType::Num => return Ok(RegConst::UInt(UInt::from_str(&const_token.tok(), bits)?)),
+        TokenType::Num(base) => {
+            return Ok(RegConst::UInt(UInt::from_str(
+                &const_token.tok(),
+                bits,
+                base,
+            )?))
+        }
         TokenType::Ident => return Ok(RegConst::Ident(const_token.tok())),
         _ => {}
     }
@@ -495,7 +499,7 @@ fn next_instruction<'tok>(
             next_op_separator(filename, src, reg_tok, tokens);
             let (r2, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let n = next_num(filename, src, token, tokens)?;
+            let n = next_num!(tokens, num_token, token, filename, src, u8)?;
             Ok(Ok(Instruction::LoadNum(r1, r2, n)))
         }
         "store" => {
@@ -509,7 +513,7 @@ fn next_instruction<'tok>(
             next_op_separator(filename, src, reg_tok, tokens);
             let (r2, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let n = next_num(filename, src, token, tokens)?;
+            let n = next_num!(tokens, num_token, token, filename, src, u8)?;
             Ok(Ok(Instruction::StoreNum(r1, r2, n)))
         }
         "push" => {
@@ -519,7 +523,7 @@ fn next_instruction<'tok>(
         "pushn" => {
             let (r, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let n = next_num(filename, src, token, tokens)?;
+            let n = next_num!(tokens, num_token, token, filename, src, u8)?;
             Ok(Ok(Instruction::PushNum(r, n)))
         }
         "pop" => {
@@ -529,7 +533,7 @@ fn next_instruction<'tok>(
         "popn" => {
             let (r, reg_tok) = next_reg_ident(filename, src, token, tokens, regs);
             next_op_separator(filename, src, reg_tok, tokens);
-            let n = next_num(filename, src, token, tokens)?;
+            let n = next_num!(tokens, num_token, token, filename, src, u8)?;
             Ok(Ok(Instruction::PopNum(r, n)))
         }
         "neg" => {
@@ -763,64 +767,74 @@ pub(super) fn parse<'tok>(
                 if let Some(num_tok) = tokens.next() {
                     let sign_pos = token.loc().byte_pos();
                     let n_pos = num_tok.loc().byte_pos();
-                    if num_tok.ty() == TokenType::Num && n_pos == sign_pos + 1 {
-                        if let Some(ty_tok) = tokens.next() {
-                            let ty_pos = ty_tok.loc().byte_pos();
-                            let n_len = num_tok.tok().len();
-                            if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + n_len {
-                                match ty_tok.tok() {
-                                    "int" => {
-                                        let tok = &src[sign_pos..n_pos + n_len];
-                                        let s = Static::Int(Int::from_str(tok, bits)?);
-                                        loc += bits.size() as UMax;
-                                        items.push(Item::Static(s));
-                                        continue;
+                    if let TokenType::Num(base) = num_tok.ty() {
+                        if n_pos == sign_pos + 1 {
+                            if let Some(ty_tok) = tokens.next() {
+                                let ty_pos = ty_tok.loc().byte_pos();
+                                let n_len = num_tok.tok().len();
+                                if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + n_len {
+                                    match ty_tok.tok() {
+                                        "int" => {
+                                            let tok = &src[sign_pos..n_pos + n_len];
+                                            let s = Static::Int(Int::from_str(tok, bits, base)?);
+                                            loc += bits.size() as UMax;
+                                            items.push(Item::Static(s));
+                                            continue;
+                                        }
+                                        "i8" => {
+                                            let n_len = num_tok.tok().len();
+                                            let tok = &src[sign_pos..n_pos + n_len];
+                                            let s =
+                                                Static::Int(Int::from_str(tok, Bits::Bit8, base)?);
+                                            add_static::<i8>(&mut items, &mut loc, s);
+                                            continue;
+                                        }
+                                        "i16" => {
+                                            let n_len = num_tok.tok().len();
+                                            let tok = &src[sign_pos..n_pos + n_len];
+                                            let s =
+                                                Static::Int(Int::from_str(tok, Bits::Bit16, base)?);
+                                            add_static::<i16>(&mut items, &mut loc, s);
+                                            continue;
+                                        }
+                                        "i32" => {
+                                            let n_len = num_tok.tok().len();
+                                            let tok = &src[sign_pos..n_pos + n_len];
+                                            let s =
+                                                Static::Int(Int::from_str(tok, Bits::Bit32, base)?);
+                                            add_static::<i32>(&mut items, &mut loc, s);
+                                            continue;
+                                        }
+                                        "i64" => {
+                                            let n_len = num_tok.tok().len();
+                                            let tok = &src[sign_pos..n_pos + n_len];
+                                            let s =
+                                                Static::Int(Int::from_str(tok, Bits::Bit64, base)?);
+                                            add_static::<i64>(&mut items, &mut loc, s);
+                                            continue;
+                                        }
+                                        "i128" => {
+                                            let n_len = num_tok.tok().len();
+                                            let tok = &src[sign_pos..n_pos + n_len];
+                                            let s = Static::Int(Int::from_str(
+                                                tok,
+                                                Bits::Bit128,
+                                                base,
+                                            )?);
+                                            add_static::<i128>(&mut items, &mut loc, s);
+                                            continue;
+                                        }
+                                        _ => {}
                                     }
-                                    "i8" => {
-                                        let n_len = num_tok.tok().len();
-                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
-                                        let s = Static::Int(Int::I8(tok));
-                                        add_static::<i8>(&mut items, &mut loc, s);
-                                        continue;
-                                    }
-                                    "i16" => {
-                                        let n_len = num_tok.tok().len();
-                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
-                                        let s = Static::Int(Int::I16(tok));
-                                        add_static::<i16>(&mut items, &mut loc, s);
-                                        continue;
-                                    }
-                                    "i32" => {
-                                        let n_len = num_tok.tok().len();
-                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
-                                        let s = Static::Int(Int::I32(tok));
-                                        add_static::<i32>(&mut items, &mut loc, s);
-                                        continue;
-                                    }
-                                    "i64" => {
-                                        let n_len = num_tok.tok().len();
-                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
-                                        let s = Static::Int(Int::I64(tok));
-                                        add_static::<i64>(&mut items, &mut loc, s);
-                                        continue;
-                                    }
-                                    "i128" => {
-                                        let n_len = num_tok.tok().len();
-                                        let tok = src[sign_pos..n_pos + n_len].parse()?;
-                                        let s = Static::Int(Int::I128(tok));
-                                        add_static::<i128>(&mut items, &mut loc, s);
-                                        continue;
-                                    }
-                                    _ => {}
                                 }
                             }
+                            crate::grim_error(
+                                (filename, src, num_tok.loc().byte_pos()),
+                                "Expected a signed type identifier after a numeric literal.",
+                                [num_tok.label(filename, "Numeric token encountered here.", Color::Red)],
+                                Some("Add a signed type identifier, such as 'int', directly after this number."),
+                            );
                         }
-                        crate::grim_error(
-                            (filename, src, num_tok.loc().byte_pos()),
-                            "Expected a signed type identifier after a numeric literal.",
-                            [num_tok.label(filename, "Numeric token encountered here.", Color::Red)],
-                            Some("Add a signed type identifier, such as 'int', directly after this number."),
-                        );
                     }
                 }
                 crate::grim_error(
@@ -830,7 +844,7 @@ pub(super) fn parse<'tok>(
                     None,
                 );
             }
-            TokenType::Num => {
+            TokenType::Num(base) => {
                 if let Some(ty_tok) = tokens.next() {
                     let n_pos = token.loc().byte_pos();
                     let ty_pos = ty_tok.loc().byte_pos();
@@ -838,64 +852,70 @@ pub(super) fn parse<'tok>(
                     if ty_tok.ty() == TokenType::Ident && ty_pos == n_pos + n_len {
                         match ty_tok.tok() {
                             "uint" => {
-                                let s = Static::UInt(UInt::from_str(token.tok(), bits)?);
+                                let s = Static::UInt(UInt::from_str(token.tok(), bits, base)?);
                                 loc += bits.size() as UMax;
                                 items.push(Item::Static(s));
                                 continue;
                             }
                             "int" => {
-                                let s = Static::Int(Int::from_str(token.tok(), bits)?);
+                                let s = Static::Int(Int::from_str(token.tok(), bits, base)?);
                                 loc += bits.size() as UMax;
                                 items.push(Item::Static(s));
                                 continue;
                             }
                             "u8" => {
-                                let s = Static::UInt(UInt::U8(token.tok().parse()?));
+                                let s =
+                                    Static::UInt(UInt::from_str(token.tok(), Bits::Bit8, base)?);
                                 add_static::<u8>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i8" => {
-                                let s = Static::Int(Int::I8(token.tok().parse()?));
+                                let s = Static::Int(Int::from_str(token.tok(), Bits::Bit8, base)?);
                                 add_static::<i8>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "u16" => {
-                                let s = Static::UInt(UInt::U16(token.tok().parse()?));
+                                let s =
+                                    Static::UInt(UInt::from_str(token.tok(), Bits::Bit16, base)?);
                                 add_static::<u16>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i16" => {
-                                let s = Static::Int(Int::I16(token.tok().parse()?));
+                                let s = Static::Int(Int::from_str(token.tok(), Bits::Bit16, base)?);
                                 add_static::<i16>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "u32" => {
-                                let s = Static::UInt(UInt::U32(token.tok().parse()?));
+                                let s =
+                                    Static::UInt(UInt::from_str(token.tok(), Bits::Bit32, base)?);
                                 add_static::<u32>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i32" => {
-                                let s = Static::Int(Int::I32(token.tok().parse()?));
+                                let s = Static::Int(Int::from_str(token.tok(), Bits::Bit32, base)?);
                                 add_static::<i32>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "u64" => {
-                                let s = Static::UInt(UInt::U64(token.tok().parse()?));
+                                let s =
+                                    Static::UInt(UInt::from_str(token.tok(), Bits::Bit64, base)?);
                                 add_static::<u64>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i64" => {
-                                let s = Static::Int(Int::I64(token.tok().parse()?));
+                                let s = Static::Int(Int::from_str(token.tok(), Bits::Bit64, base)?);
                                 add_static::<i64>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "u128" => {
-                                let s = Static::UInt(UInt::U128(token.tok().parse()?));
+                                let s =
+                                    Static::UInt(UInt::from_str(token.tok(), Bits::Bit128, base)?);
                                 add_static::<u128>(&mut items, &mut loc, s);
                                 continue;
                             }
                             "i128" => {
-                                let s = Static::Int(Int::I128(token.tok().parse()?));
+                                let s =
+                                    Static::Int(Int::from_str(token.tok(), Bits::Bit128, base)?);
                                 add_static::<i128>(&mut items, &mut loc, s);
                                 continue;
                             }
