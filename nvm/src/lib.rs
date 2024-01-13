@@ -426,13 +426,6 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
         Ok(())
     }
 
-    /// Pops a value off of the virtual stack.
-    #[inline]
-    fn pop<T: Copy>(&mut self, memory: &impl MemoryDriver) -> Result<T, NvmError> {
-        *self.sp_mut() = checked_sub!(self.sp(), core::mem::size_of::<T>().try_into()?)?;
-        memory.read(self.sp())
-    }
-
     /// Sets or unsets `flag`.
     #[inline]
     fn set(&mut self, set: bool, flag: Flags) {
@@ -471,7 +464,7 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                 }
                 OpCode::Load => {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
-                    *self.reg_mut(l.try_into()?)? = memory.read(self.reg(r.try_into()?)?)?;
+                    *self.reg_mut(l.try_into()?)? = UInt::read(memory, self.reg(r.try_into()?)?)?;
                 }
                 OpCode::LoadNum => {
                     let [l, r, n] = memory.read::<[u8; 3]>(checked_add!(ip, 1)?)?;
@@ -486,48 +479,88 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     };
                     let r = self.reg_mut(l.try_into()?)?;
                     *r = 0;
-                    let bytes = bytemuck::bytes_of_mut(r);
-                    let bytes = match cfg!(target_endian = "little") {
-                        true => bytes.get_mut(..n),
-                        false => bytes.get_mut(checked_sub!(bytes.len(), n)?..),
+                    let mut bytes = bytemuck::bytes_of_mut(r);
+                    if cfg!(feature = "little_endian") {
+                        bytes = bytes.get_mut(..n).ok_or(NvmError::RegisterWriteError)?;
+                    } else if cfg!(feature = "big_endian") {
+                        bytes = bytes
+                            .get_mut(checked_sub!(bytes.len(), n)?..)
+                            .ok_or(NvmError::RegisterWriteError)?;
+                    } else {
+                        bytes = match cfg!(target_endian = "little") {
+                            true => bytes.get_mut(..n),
+                            false => bytes.get_mut(checked_sub!(bytes.len(), n)?..),
+                        }
+                        .ok_or(NvmError::RegisterWriteError)?;
                     }
-                    .ok_or(NvmError::RegisterWriteError)?;
                     bytes.copy_from_slice(mem);
                 }
                 OpCode::Store => {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
-                    memory.write(self.reg(l.try_into()?)?, &self.reg(r.try_into()?)?)?;
+                    let mut value = self.reg(r.try_into()?)?;
+                    if cfg!(feature = "little_endian") {
+                        value = UInt::from_ne_bytes(value.to_le_bytes());
+                    } else if cfg!(feature = "big_endian") {
+                        value = UInt::from_ne_bytes(value.to_be_bytes());
+                    }
+                    memory.write(self.reg(l.try_into()?)?, &value)?;
                 }
                 OpCode::StoreNum => {
                     let [l, r, n] = memory.read::<[u8; 3]>(checked_add!(ip, 1)?)?;
                     let n = n.try_into()?;
                     let bytes = self.reg(r.try_into()?)?.to_ne_bytes();
-                    let bytes = match cfg!(target_endian = "little") {
-                        true => bytes.get(..n),
-                        false => bytes.get(checked_sub!(bytes.len(), n)?..),
+                    let mut bytes = bytes.as_slice();
+                    if cfg!(feature = "little_endian") {
+                        bytes = bytes.get(..n).ok_or(NvmError::RegisterReadError)?;
+                    } else if cfg!(feature = "big_endian") {
+                        bytes = bytes
+                            .get(checked_sub!(bytes.len(), n)?..)
+                            .ok_or(NvmError::RegisterReadError)?;
+                    } else {
+                        bytes = match cfg!(target_endian = "little") {
+                            true => bytes.get(..n),
+                            false => bytes.get(checked_sub!(bytes.len(), n)?..),
+                        }
+                        .ok_or(NvmError::RegisterReadError)?;
                     }
-                    .ok_or(NvmError::RegisterReadError)?;
                     memory.write_bytes(self.reg(l.try_into()?)?, bytes)?;
                 }
                 OpCode::Push => {
                     let r = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
-                    self.push(memory, &self.reg(r)?)?;
+                    let mut value = self.reg(r)?;
+                    if cfg!(feature = "little_endian") {
+                        value = UInt::from_ne_bytes(value.to_le_bytes());
+                    } else if cfg!(feature = "big_endian") {
+                        value = UInt::from_ne_bytes(value.to_be_bytes());
+                    }
+                    self.push(memory, &value)?;
                 }
                 OpCode::PushNum => {
                     let [r, n] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
                     let n = n.try_into()?;
                     let bytes = self.reg(r.try_into()?)?.to_ne_bytes();
-                    let bytes = match cfg!(target_endian = "little") {
-                        true => bytes.get(..n),
-                        false => bytes.get(checked_sub!(bytes.len(), n)?..),
+                    let mut bytes = bytes.as_slice();
+                    if cfg!(feature = "little_endian") {
+                        bytes = bytes.get(..n).ok_or(NvmError::RegisterReadError)?;
+                    } else if cfg!(feature = "big_endian") {
+                        bytes = bytes
+                            .get(checked_sub!(bytes.len(), n)?..)
+                            .ok_or(NvmError::RegisterReadError)?;
+                    } else {
+                        bytes = match cfg!(target_endian = "little") {
+                            true => bytes.get(..n),
+                            false => bytes.get(checked_sub!(bytes.len(), n)?..),
+                        }
+                        .ok_or(NvmError::RegisterReadError)?;
                     }
-                    .ok_or(NvmError::RegisterReadError)?;
                     memory.write_bytes(self.sp(), bytes)?;
                     *self.sp_mut() = checked_add!(self.sp(), n.try_into()?)?;
                 }
                 OpCode::Pop => {
                     let r = memory.read::<u8>(checked_add!(ip, 1)?)?.try_into()?;
-                    *self.reg_mut(r)? = self.pop(memory)?;
+                    *self.sp_mut() =
+                        checked_sub!(self.sp(), core::mem::size_of::<UInt>().try_into()?)?;
+                    *self.reg_mut(r)? = UInt::read(memory, self.sp())?;
                 }
                 OpCode::PopNum => {
                     let [r, n] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
@@ -539,12 +572,22 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     };
                     let r = self.reg_mut(r.try_into()?)?;
                     *r = 0;
-                    let bytes = bytemuck::bytes_of_mut(r);
-                    let bytes = match cfg!(target_endian = "little") {
-                        true => bytes.get_mut(..n.try_into()?),
-                        false => bytes.get_mut(checked_sub!(bytes.len(), n.try_into()?)?..),
+                    let mut bytes = bytemuck::bytes_of_mut(r);
+                    if cfg!(feature = "little_endian") {
+                        bytes = bytes
+                            .get_mut(..n.try_into()?)
+                            .ok_or(NvmError::RegisterWriteError)?;
+                    } else if cfg!(feature = "big_endian") {
+                        bytes = bytes
+                            .get_mut(checked_sub!(bytes.len(), n.try_into()?)?..)
+                            .ok_or(NvmError::RegisterWriteError)?;
+                    } else {
+                        bytes = match cfg!(target_endian = "little") {
+                            true => bytes.get_mut(..n.try_into()?),
+                            false => bytes.get_mut(checked_sub!(bytes.len(), n.try_into()?)?..),
+                        }
+                        .ok_or(NvmError::RegisterWriteError)?;
                     }
-                    .ok_or(NvmError::RegisterWriteError)?;
                     bytes.copy_from_slice(mem);
                     *self.sp_mut() = checked_sub!(self.sp(), n)?;
                 }
@@ -693,10 +736,22 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
                     *self.reg_mut(l)? = shr;
                 }
                 OpCode::Call => {
-                    self.push(memory, &self.ip())?;
+                    let mut value = self.ip();
+                    if cfg!(feature = "little_endian") {
+                        value = UInt::from_ne_bytes(value.to_le_bytes());
+                    } else if cfg!(feature = "big_endian") {
+                        value = UInt::from_ne_bytes(value.to_be_bytes());
+                    }
+                    memory.write(self.sp(), &value)?;
+                    *self.sp_mut() =
+                        checked_add!(self.sp(), core::mem::size_of::<UInt>().try_into()?)?;
                     *self.ip_mut() = UInt::read(memory, checked_add!(ip, 1)?)?;
                 }
-                OpCode::Return => *self.ip_mut() = self.pop(memory)?,
+                OpCode::Return => {
+                    *self.sp_mut() =
+                        checked_sub!(self.sp(), core::mem::size_of::<UInt>().try_into()?)?;
+                    *self.ip_mut() = UInt::read(memory, self.sp())?;
+                }
                 OpCode::Cmp => {
                     let [l, r] = memory.read::<[u8; 2]>(checked_add!(ip, 1)?)?;
                     let l = self.reg(l.try_into()?)?;
