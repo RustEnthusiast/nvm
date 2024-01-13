@@ -426,6 +426,14 @@ impl<const REG_COUNT: usize> VM<REG_COUNT> {
         Ok(())
     }
 
+    /// Pops a value off of the virtual stack.
+    #[inline]
+    #[allow(dead_code)]
+    fn pop<T: Copy>(&mut self, memory: &impl MemoryDriver) -> Result<T, NvmError> {
+        *self.sp_mut() = checked_sub!(self.sp(), core::mem::size_of::<T>().try_into()?)?;
+        memory.read(self.sp())
+    }
+
     /// Sets or unsets `flag`.
     #[inline]
     fn set(&mut self, set: bool, flag: Flags) {
