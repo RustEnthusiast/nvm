@@ -3,26 +3,9 @@ name = "salvo"
 version = "0.0.0"
 edition = "2021"
 
-[features]
-llvm4-0 = ["inkwell/llvm4-0"]
-llvm5-0 = ["inkwell/llvm5-0"]
-llvm6-0 = ["inkwell/llvm6-0"]
-llvm7-0 = ["inkwell/llvm7-0"]
-llvm8-0 = ["inkwell/llvm8-0"]
-llvm9-0 = ["inkwell/llvm9-0"]
-llvm10-0 = ["inkwell/llvm10-0"]
-llvm11-0 = ["inkwell/llvm11-0"]
-llvm12-0 = ["inkwell/llvm12-0-prefer-dynamic"]
-llvm13-0 = ["inkwell/llvm13-0-prefer-dynamic"]
-llvm14-0 = ["inkwell/llvm14-0-prefer-dynamic"]
-llvm15-0 = ["inkwell/llvm15-0-prefer-dynamic"]
-llvm16-0 = ["inkwell/llvm16-0-prefer-dynamic"]
-llvm17-0 = ["inkwell/llvm17-0-prefer-dynamic"]
-
 [dependencies]
 ariadne = "0.3"
 clap = { version = "4.4", features = ["derive"] }
 grim = { path = "../grim" }
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master" }
 thiserror = "1.0"
 unicode-ident = "1.0"
