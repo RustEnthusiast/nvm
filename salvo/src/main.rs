@@ -1,7 +1,10 @@
 mod codegen;
 mod lexer;
 mod parser;
-use self::codegen::CodegenError;
+use self::{
+    codegen::CodegenError,
+    parser::{BlockExpression, Expression, Item, LiteralExpression, Statements},
+};
 use ariadne::{Label, Report, ReportKind, Source};
 use clap::{Parser as CliParser, ValueEnum};
 use core::ops::Range;
@@ -72,6 +75,22 @@ fn salvo_error<'id, LabelIter: IntoIterator<Item = Label<(&'id str, Range<usize>
     std::process::exit(101);
 }
 
+/// Checks for the program's `main` function.
+fn check_main(filename: &str, src: &str, items: &[Item]) {
+    for item in items {
+        let Item::Fn(f) = item;
+        if f.name() == "main" {
+            if let BlockExpression::Statements(Statements::Expression(Expression::Literal(
+                LiteralExpression::Int(_, _),
+            ))) = f.block()
+            {
+                return;
+            }
+        }
+    }
+    salvo_error((filename, src, 0), "`main` function not found.", [], None);
+}
+
 /// Compiles Salvo source code.
 fn compile(
     filename: &str,
@@ -83,6 +102,7 @@ fn compile(
 ) -> Result<(), CodegenError> {
     let tokens = lexer::lex(filename, src);
     let items = parser::parse(filename, src, tokens.iter());
+    check_main(filename, src, &items);
     codegen::gen(filename, target, linker, out_file_type, opt_level, items)
 }
 

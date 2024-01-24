@@ -1,4 +1,7 @@
-use crate::{parser::Item, OptLevel, OutputFileType};
+use crate::{
+    parser::{BlockExpression, Expression, Item, LiteralExpression, Statements},
+    OptLevel, OutputFileType,
+};
 use core::num::ParseIntError;
 use grim::{Bits, Endianness};
 use inkwell::{
@@ -49,10 +52,18 @@ pub(super) fn gen<'src, I: IntoIterator<Item = Item<'src>>>(
         .to_str()
         .expect("file stem should be valid UTF-8");
     if target == "nvm" {
-        let mut asm = String::from(include_str!("../rt/nvm.asm"));
+        let mut asm = String::from(include_str!("../rt/nvm.s"));
         for item in items {
             match item {
-                Item::Fn(f) => asm.push_str(&format!("{} return\n", f.name())),
+                Item::Fn(f) => match f.block() {
+                    BlockExpression::Unit => asm.push_str(&format!("{} return\n", f.name())),
+                    BlockExpression::Statements(Statements::Expression(Expression::Literal(
+                        LiteralExpression::Int(expr, radix),
+                    ))) => {
+                        let value = usize::from_str_radix(expr, radix.as_u32())?;
+                        asm.push_str(&format!("{}\nmovec r0, {value}\nreturn\n", f.name()));
+                    }
+                },
             }
         }
         let nvm = grim::assemble(filename, &asm, Bits::BitNative, Endianness::Native, 4)?;
@@ -62,23 +73,38 @@ pub(super) fn gen<'src, I: IntoIterator<Item = Item<'src>>>(
         let builder = context.create_builder();
         let module = context.create_module(module_name);
 
-        let fn_type = context.void_type().fn_type(&[], false);
-        let function = module.add_function("_start", fn_type, None);
-        let basic_block = context.append_basic_block(function, "entry");
-        builder.position_at_end(basic_block);
-        let asm_fn = context.void_type().fn_type(
-            &[context.i64_type().into(), context.i64_type().into()],
-            false,
-        );
-        let asm = context.create_inline_asm(
-            asm_fn,
-            include_str!("../rt/x86_64-linux.asm").to_string(),
-            "{rax},{rdi}".to_string(),
-            true,
-            false,
-            #[cfg(not(any(feature = "llvm4-0", feature = "llvm5-0", feature = "llvm6-0")))]
-            None,
-            #[cfg(not(any(
+        if target == "x86_64-linux" {
+            let fn_type = context.void_type().fn_type(&[], false);
+            let function = module.add_function("_start", fn_type, None);
+            let basic_block = context.append_basic_block(function, "entry");
+            builder.position_at_end(basic_block);
+            let asm_fn = context
+                .void_type()
+                .fn_type(&[context.i64_type().into()], false);
+            let asm = context.create_inline_asm(
+                asm_fn,
+                include_str!("../rt/x86_64-linux.s").to_string(),
+                "{rax}".to_string(),
+                true,
+                false,
+                #[cfg(not(any(feature = "llvm4-0", feature = "llvm5-0", feature = "llvm6-0")))]
+                None,
+                #[cfg(not(any(
+                    feature = "llvm4-0",
+                    feature = "llvm5-0",
+                    feature = "llvm6-0",
+                    feature = "llvm7-0",
+                    feature = "llvm8-0",
+                    feature = "llvm9-0",
+                    feature = "llvm10-0",
+                    feature = "llvm11-0",
+                    feature = "llvm12-0"
+                )))]
+                false,
+            );
+            let params: &[BasicMetadataValueEnum] =
+                &[context.i64_type().const_int(60, false).into()];
+            #[cfg(any(
                 feature = "llvm4-0",
                 feature = "llvm5-0",
                 feature = "llvm6-0",
@@ -87,46 +113,42 @@ pub(super) fn gen<'src, I: IntoIterator<Item = Item<'src>>>(
                 feature = "llvm9-0",
                 feature = "llvm10-0",
                 feature = "llvm11-0",
-                feature = "llvm12-0"
-            )))]
-            false,
-        );
-        let params: &[BasicMetadataValueEnum] = &[
-            context.i64_type().const_int(60, false).into(),
-            context.i64_type().const_int(69, false).into(),
-        ];
-        #[cfg(any(
-            feature = "llvm4-0",
-            feature = "llvm5-0",
-            feature = "llvm6-0",
-            feature = "llvm7-0",
-            feature = "llvm8-0",
-            feature = "llvm9-0",
-            feature = "llvm10-0",
-            feature = "llvm11-0",
-            feature = "llvm12-0",
-            feature = "llvm13-0",
-            feature = "llvm14-0"
-        ))]
-        {
-            use inkwell::values::CallableValue;
-            let callable_value = CallableValue::try_from(asm).unwrap();
-            builder.build_call(callable_value, params, "exit").unwrap();
+                feature = "llvm12-0",
+                feature = "llvm13-0",
+                feature = "llvm14-0"
+            ))]
+            {
+                use inkwell::values::CallableValue;
+                let callable_value = CallableValue::try_from(asm).unwrap();
+                builder.build_call(callable_value, params, "exit").unwrap();
+            }
+            #[cfg(any(feature = "llvm15-0", feature = "llvm16-0", feature = "llvm17-0"))]
+            builder.build_indirect_call(asm_fn, asm, params, "exit")?;
+            builder.build_return(None)?;
         }
-        #[cfg(any(feature = "llvm15-0", feature = "llvm16-0", feature = "llvm17-0"))]
-        builder
-            .build_indirect_call(asm_fn, asm, params, "exit")
-            .unwrap();
-        builder.build_return(None)?;
+
         for item in items {
             match item {
-                Item::Fn(f) => {
-                    let fn_type = context.void_type().fn_type(&[], false);
-                    let function = module.add_function(f.name(), fn_type, None);
-                    let basic_block = context.append_basic_block(function, "entry");
-                    builder.position_at_end(basic_block);
-                    builder.build_return(None)?;
-                }
+                Item::Fn(f) => match f.block() {
+                    BlockExpression::Unit => {
+                        let fn_type = context.void_type().fn_type(&[], false);
+                        let function = module.add_function(f.name(), fn_type, None);
+                        let basic_block = context.append_basic_block(function, "entry");
+                        builder.position_at_end(basic_block);
+                        builder.build_return(None)?;
+                    }
+                    BlockExpression::Statements(Statements::Expression(Expression::Literal(
+                        LiteralExpression::Int(expr, radix),
+                    ))) => {
+                        let fn_type = context.i64_type().fn_type(&[], false);
+                        let function = module.add_function(f.name(), fn_type, None);
+                        let basic_block = context.append_basic_block(function, "entry");
+                        builder.position_at_end(basic_block);
+                        let value = u64::from_str_radix(expr, radix.as_u32())?;
+                        let value = context.i64_type().const_int(value, false);
+                        builder.build_return(Some(&value))?;
+                    }
+                },
             }
         }
 
@@ -138,9 +160,10 @@ pub(super) fn gen<'src, I: IntoIterator<Item = Item<'src>>>(
             OptLevel::Default => OptimizationLevel::Default,
             OptLevel::Aggressive => OptimizationLevel::Aggressive,
         };
-        let cpu = match target {
-            "x86_64-linux" => Some("x86-64"),
-            _ => None,
+        let cpu = if target.starts_with("x86_64") {
+            Some("x86-64")
+        } else {
+            None
         };
 
         let machine = Target::from_triple(&triple)

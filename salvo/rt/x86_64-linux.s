@@ -1,6 +1,5 @@
 push %rax
-push %rdi
 call main
-pop %rdi
+mov %rax, %rdi
 pop %rax
 syscall
