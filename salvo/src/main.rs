@@ -1,10 +1,7 @@
 mod codegen;
 mod lexer;
 mod parser;
-use self::{
-    codegen::CodegenError,
-    parser::{BlockExpression, Expression, Item, LiteralExpression, Statements},
-};
+use self::{codegen::CodegenError, parser::Item};
 use ariadne::{Label, Report, ReportKind, Source};
 use clap::Parser as CliParser;
 use core::ops::Range;
@@ -44,12 +41,7 @@ fn check_main(filename: &str, src: &str, items: &[Item]) {
     for item in items {
         let Item::Fn(f) = item;
         if f.name() == "main" {
-            if let BlockExpression::Statements(Statements::Expression(Expression::Literal(
-                LiteralExpression::Int(_, _),
-            ))) = f.block()
-            {
-                return;
-            }
+            return;
         }
     }
     salvo_error((filename, src, 0), "`main` function not found.", [], None);
